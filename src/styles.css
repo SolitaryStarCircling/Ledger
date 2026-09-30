@@ -230,6 +230,7 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 16px 20px 4px;
+  min-height: 57px;
 }
 
 .theme-toggle {
@@ -317,11 +318,22 @@ html, body {
   z-index: -1;
 }
 .summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: -8px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--fill);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .14em;
+  font-family: inherit;
   color: var(--text3);
+  transition: background .18s, transform .18s;
 }
+.summary-label:active { transform: scale(.97); }
+.summary-label .arrow { font-size: 8px; letter-spacing: 0; opacity: .75; }
 .summary-amount {
   font-size: 45px;
   font-weight: 400;
@@ -450,15 +462,100 @@ html, body {
 }
 .tx-amount.income { color: var(--green); }
 
-.empty {
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--text3);
-  font-size: 14px;
+/* ============ 统一空态（插图式） ============ */
+/* 明细页 / 财报页 / AI 分析面板共用这一套 */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 88px 24px 24px;
   animation: fadeUp .5s cubic-bezier(.2,.8,.2,1);
 }
-.empty .emoji { display: block; margin-bottom: 12px; opacity: .45; color: var(--text3); }
-.empty .emoji svg { width: 40px; height: 40px; }
+.empty-state .es-art {
+  position: relative;
+  width: 108px; height: 108px;
+  display: grid; place-items: center;
+  margin-bottom: 22px;
+}
+.empty-state .es-glow {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow-1), var(--glow-2) 45%, transparent 72%);
+  opacity: .9;
+}
+.empty-state .es-art svg { position: relative; width: 52px; height: 52px; color: var(--text3); }
+.empty-state .es-title {
+  font-size: 16px; font-weight: 600; letter-spacing: .2px; color: var(--text2);
+  margin-bottom: 8px;
+}
+.empty-state .es-text { font-size: 13px; color: var(--text3); margin-bottom: 26px; }
+.empty-state .es-btn {
+  padding: 11px 30px; border-radius: 99px;
+  background: var(--blue); color: #fff;
+  font-size: 14px; font-weight: 600;
+  box-shadow: var(--sh-blue);
+  transition: transform .24s cubic-bezier(.34,1.56,.64,1), filter .24s ease;
+}
+.empty-state .es-btn:active { transform: scale(.94); filter: brightness(.94); }
+
+/* 紧凑版：放在列表/卡片内部（财报页分类空态） */
+.empty-state.compact { padding: 34px 20px 26px; }
+.empty-state.compact .es-art { width: 72px; height: 72px; margin-bottom: 14px; }
+.empty-state.compact .es-art svg { width: 34px; height: 34px; }
+.empty-state.compact .es-title { font-size: 14px; margin-bottom: 0; }
+.empty-state.compact .es-text { font-size: 12.5px; margin-bottom: 0; }
+
+/* 卡片版：用在 AI 分析面板 */
+.empty-state.card {
+  padding: 26px 20px;
+  background: var(--card); border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 0.5px var(--hairline);
+}
+.empty-state.card .es-art { width: 76px; height: 76px; margin-bottom: 14px; }
+.empty-state.card .es-art svg { width: 36px; height: 36px; }
+.empty-state.card .es-title { font-size: 15px; }
+.empty-state.card .es-text { font-size: 12.5px; line-height: 1.6; max-width: 260px; margin-bottom: 0; }
+.empty-state.card .es-btn { margin-top: 16px; }
+
+/* 清除分析数据：红色文字按钮 + 说明，避免误点 */
+/* 生成分析 + 清除数据：同一行，中心轴对齐 */
+.ai-gen-row { display: flex; align-items: center; gap: 10px; }
+
+.ai-clear {
+  flex: none;
+  height: 42px;
+  padding: 0 18px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: transform .18s, background .18s;
+}
+.ai-clear:active { transform: scale(.96); background: color-mix(in srgb, var(--red) 20%, transparent); }
+
+/* ============ 一次性手势提示 ============ */
+.gesture-hint {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 16px 10px;
+  padding: 11px 12px 11px 14px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--blue) 10%, var(--card));
+  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity .22s ease, transform .22s ease;
+}
+.gesture-hint.show { opacity: 1; transform: none; }
+.gesture-hint[hidden] { display: none; }
+.gh-ic { flex: none; display: grid; place-items: center; color: var(--blue); }
+.gh-ic svg { width: 18px; height: 18px; }
+.gh-text { flex: 1; font-size: 12.5px; line-height: 1.4; color: var(--text2); }
+.gh-close {
+  flex: none; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--text3);
+}
+.gh-close svg { width: 15px; height: 15px; }
+.gh-close:active { background: var(--fill); }
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(14px); }
@@ -466,13 +563,6 @@ html, body {
 }
 
 /* ============ 统计页 ============ */
-.stats-period {
-  display: flex;
-  justify-content: center;
-  padding: 18px 20px 4px;
-}
-.stats-period .segmented { width: 280px; }
-
 .segmented {
   position: relative;
   display: flex;
@@ -515,7 +605,48 @@ html, body {
 .segmented[data-count="4"][data-period="day"]   .seg-thumb { transform: translateX(300%); }
 
 .stats-head { text-align: center; padding: 14px 20px 4px; }
-.stats-title { font-size: 13px; color: var(--text2); font-weight: 500; }
+/* 标题本身就是「结余范围」入口：小 chip + 箭头，点开弹出小面板 */
+.stats-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 9px;
+  background: var(--fill);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text2);
+  transition: background .18s, transform .18s;
+}
+.stats-title:active { transform: scale(.96); }
+.stats-title .arrow { font-size: 9px; color: var(--text3); opacity: .75; }
+
+/* 「结余范围」面板：竖排小长方形，不占满屏 */
+.period-list {
+  display: flex; flex-direction: column;
+  background: var(--card); border-radius: var(--r-sm);
+}
+.period-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px; text-align: left; font-family: inherit;
+  color: var(--text); transition: background .15s;
+}
+.period-row + .period-row { border-top: 0.5px solid var(--sep); }
+.period-row:active { background: var(--fill); }
+.period-row.sel { background: var(--fill); }
+.period-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.period-row-label { font-size: 15px; font-weight: 500; }
+.period-row-hint { font-size: 11.5px; color: var(--text3); }
+.period-row-check { flex: none; width: 18px; height: 18px; color: var(--blue); }
+.period-row-check svg { width: 18px; height: 18px; display: block; }
+
+/* 财报页：图表 / AI 分析 视图切换 */
+.stats-view-wrap { display: flex; justify-content: center; padding: 2px 20px 0; }
+#statsViewSeg { width: 230px; }
+.segmented[data-count="2"] .seg-thumb { width: calc(50% - 2px); }
+.segmented[data-count="2"][data-view="chart"] .seg-thumb { transform: translateX(0%); }
+.segmented[data-count="2"][data-view="ai"] .seg-thumb { transform: translateX(100%); }
 .stats-total {
   font-size: 34px;
   font-weight: 700;
@@ -616,31 +747,34 @@ html, body {
 /* ============ Tab Bar ============ */
 .tabbar {
   flex: none;
-  position: relative;
+  align-self: center;            /* 在 .app 的纵向 flex 里居中，不贴左右边 */
   z-index: 20;
   display: flex;
-  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 0px));
-  /* 用不透明实色兜底，彻底避免底部残黑/发暗 */
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 999px;
+  /* 颜色沿用之前的白卡；只是把投影加重，让它在浅色底上真正浮起来 */
   background: var(--card);
-  /* backdrop-filter 在部分 WebView 会把底部采样成黑，这里改为纯色，不依赖它撑色 */
-  border-top: 0.5px solid var(--sep);
+  box-shadow: 0 14px 30px -12px rgba(28,26,23,0.32), 0 3px 8px -4px rgba(28,26,23,0.12), inset 0 0 0 0.5px var(--hairline);
+  margin-bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 10px);
   transition: opacity .3s ease;
 }
 .tab {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: 7px 0 5px;
+  padding: 6px 16px;
+  border-radius: 999px;
   color: var(--text3);
   font-size: 10px;
   font-weight: 500;
-  transition: color .22s ease;
   letter-spacing: 0.1px;
+  transition: color .22s ease, background .22s ease;
 }
-.tab svg { width: 25px; height: 25px; transition: transform .32s cubic-bezier(.34,1.56,.64,1); }
-.tab.active { color: var(--blue); }
+.tab svg { width: 22px; height: 22px; transition: transform .32s cubic-bezier(.34,1.56,.64,1); }
+.tab.active { color: var(--blue); background: var(--fill); }
 .tab.active svg { transform: scale(1.06); animation: tabPop .42s cubic-bezier(.34,1.56,.64,1); }
 .tab:active svg { transform: scale(0.9); }
 @keyframes tabPop {
@@ -1313,8 +1447,12 @@ html, body {
 
 /* ============ 设置页 ============ */
 .settings-header {
+  position: relative;
   padding: 40px 24px 8px;
 }
+
+/* 深色模式按钮：从首页移到这里，保持原来的小圆钮形态，不占独立一行 */
+#page-settings .theme-toggle { top: 38px; right: 22px; }
 .settings-header h2 {
   font-size: 29px;
   font-weight: 500;
@@ -1669,54 +1807,6 @@ html, body {
 }
 .fav-hint[hidden] { display: none; }
 
-/* ============ 空状态（插图式） ============ */
-.empty.rich {
-  padding-top: 88px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.empty-art {
-  position: relative;
-  width: 108px; height: 108px;
-  display: grid; place-items: center;
-  margin-bottom: 22px;
-}
-.e-glow {
-  position: absolute; inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--glow-1), var(--glow-2) 45%, transparent 72%);
-  opacity: .9;
-}
-.empty-art svg {
-  position: relative;
-  width: 52px; height: 52px;
-  color: var(--text3);
-}
-.empty-title {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: .2px;
-  color: var(--text2);
-  margin-bottom: 8px;
-}
-.empty-sub {
-  font-size: 13px;
-  color: var(--text3);
-  margin-bottom: 26px;
-}
-.empty-btn {
-  padding: 11px 30px;
-  border-radius: 99px;
-  background: var(--blue);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  box-shadow: var(--sh-blue);
-  transition: transform .24s cubic-bezier(.34,1.56,.64,1), filter .24s ease;
-}
-.empty-btn:active { transform: scale(.94); filter: brightness(.94); }
-
 /* ============ 记账成功确认卡 ============ */
 .save-done {
   position: fixed;
@@ -1953,9 +2043,10 @@ html, body {
 /* ============ AI 消费分析：分析页 ============ */
 /* display:flex 会盖过 UA 的 [hidden]，这里显式补回（与 .budget-clear[hidden] 一致） */
 .ai-result[hidden],
-.ai-empty[hidden],
-.ai-card[hidden],
-.ai-empty-btn[hidden] { display: none; }
+.ai-card[hidden] { display: none; }
+
+/* 面板整体左右内缩：子元素用 width:100% 就能与卡片对齐 */
+#aiPanel { padding: 0 16px; }
 .ai-status {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   margin: 0 0 10px;
@@ -1965,7 +2056,7 @@ html, body {
 .ai-status-item.off { color: var(--red); }
 
 .ai-generate {
-  width: 100%; height: 50px;
+  flex: 1; min-width: 0; height: 50px;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   border-radius: var(--r-md);
   background: var(--blue); color: #fff;
@@ -2009,25 +2100,8 @@ html, body {
 .ai-switch.on { background: var(--blue); }
 .ai-switch.on .ai-switch-knob { transform: translateX(18px); }
 
-.ai-empty {
-  margin-top: 14px; padding: 26px 20px;
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-  background: var(--card); border-radius: var(--r-md);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
-}
-.ai-empty-icon { color: var(--blue); margin-bottom: 10px; }
-.ai-empty-icon svg { width: 30px; height: 30px; }
-.ai-empty-title { font-size: 15px; font-weight: 600; color: var(--text); }
-.ai-empty-text {
-  margin-top: 6px; max-width: 260px;
-  font-size: 12.5px; line-height: 1.6; color: var(--text3);
-}
-.ai-empty-btn {
-  margin-top: 14px; height: 38px; padding: 0 18px;
-  border-radius: 19px; background: var(--blue); color: #fff;
-  font-size: 14px; font-weight: 600; font-family: inherit;
-}
-.ai-empty-btn:active { opacity: .85; }
+
+
 
 .ai-result { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
 .ai-card {

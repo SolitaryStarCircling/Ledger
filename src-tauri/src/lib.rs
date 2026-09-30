@@ -233,6 +233,14 @@ fn ai_key_set(
     Ok(keys::hint_text(&conn))
 }
 
+/// 清除所有已生成的分析结果（settings 里的 ai_analysis_* 缓存），返回清除条数。
+/// 只删 AI 分析缓存，不碰账目数据、不碰 API Key。
+#[tauri::command]
+fn ai_clear_analyses(state: DbState<'_>) -> Result<usize, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    service::delete_settings_by_prefix(&conn, "ai_analysis_")
+}
+
 #[tauri::command]
 fn ai_key_clear(
     state: DbState<'_>,
@@ -395,6 +403,16 @@ fn import_db_data(
         )
         .unwrap_or(0);
 
+    // 备份里若带分类表，一并导入。否则自定义分类的记录会全部退化成「其他」，
+    // 统计页还会出现多行同名「其他」（见 list_categories 的兜底逻辑）。
+    let has_cats: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM import_db.sqlite_master WHERE type='table' AND name='categories'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
     // 6. 覆盖数据（事务保证原子性）
     let tx = conn
         .unchecked_transaction()
@@ -428,6 +446,17 @@ fn import_db_data(
             [],
         )
         .map_err(|e| format!("导入常用项失败: {}", e))?;
+    }
+
+    // 分类只做「合并」不做清空：备份里的分类覆盖同 id 的本地分类，
+    // 本地多出来的分类留着不用即可，避免备份缺分类时把兜底分类「其他」也一起删掉。
+    if has_cats > 0 {
+        tx.execute(
+            "INSERT OR REPLACE INTO categories (id, type, name, icon, color, sort, builtin)
+             SELECT id, type, name, icon, color, sort, builtin FROM import_db.categories",
+            [],
+        )
+        .map_err(|e| format!("导入分类失败: {}", e))?;
     }
 
     tx.commit().map_err(|e| format!("提交事务失败: {}", e))?;
@@ -488,6 +517,7 @@ pub fn run() {
             delete_setting,
             ai_config_get,
             ai_config_set,
+            ai_clear_analyses,
             ai_key_set,
             ai_key_clear,
             ai_analyze,

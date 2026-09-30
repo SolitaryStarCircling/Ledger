@@ -23,3 +23,6 @@
 # 锁文件由工具自动生成，不计入 GitHub 语言统计
 Cargo.lock        linguist-generated
 package-lock.json linguist-generated
+
+# 随包分发的第三方库，不计入本项目的语言统计
+src/vendor/* linguist-vendored

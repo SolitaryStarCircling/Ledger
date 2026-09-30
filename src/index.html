@@ -24,20 +24,6 @@
             <path d="M21 21l-4.3-4.3"/>
           </svg>
         </button>
-        <button class="month-label" id="monthLabel">
-          本月 <span class="arrow">▼</span>
-        </button>
-        <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
-          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="4"/>
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-          </svg>
-        </button>
       </div>
 
       <div class="search-bar" id="searchBar">
@@ -51,7 +37,7 @@
       </div>
 
       <div class="summary-card">
-        <div class="summary-label" id="summaryLabel">本月支出</div>
+        <button class="summary-label" id="summaryLabel">本月支出 <span class="arrow">▼</span></button>
         <div class="summary-amount" id="monthExpense">¥0.00</div>
         <div class="summary-row">
           <div class="item"><span class="s-dot"></span>收入 <b id="monthIncome">¥0.00</b></div>
@@ -67,46 +53,56 @@
         </div>
       </div>
       <div class="quick-row" id="quickRow"></div>
+
+      <div class="gesture-hint" id="gestureHint" hidden>
+        <span class="gh-ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H6"/><path d="M11 7l-5 5 5 5"/></svg>
+        </span>
+        <span class="gh-text">左滑删除 · 长按多选 · 点一行看更多</span>
+        <button class="gh-close" id="gestureHintClose" aria-label="知道了">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
       <div id="txList"></div>
     </section>
 
     <!-- 统计页 -->
     <section class="page" id="page-stats">
-      <div class="stats-period">
-        <div class="segmented" id="periodSeg" data-count="4" data-period="month">
-          <div class="seg-thumb"></div>
-          <button class="seg" data-period="year">年</button>
-          <button class="seg active" data-period="month">月</button>
-          <button class="seg" data-period="week">周</button>
-          <button class="seg" data-period="day">天</button>
-        </div>
-      </div>
-
-      <div class="stats-head">
-        <div class="stats-title" id="statsTitle">本月结余</div>
-        <div class="stats-total" id="statsTotal">¥0.00</div>
-        <div class="stats-subrow">
-          <span>收入 <b id="statsIncome">¥0.00</b></span>
-          <span>支出 <b id="statsExpense">¥0.00</b></span>
-        </div>
-      </div>
-
-      <div class="donut-wrap">
-        <svg class="donut" viewBox="0 0 140 140" id="donut"></svg>
-        <div class="donut-center">
-          <div class="lbl">支出</div>
-          <div class="val" id="donutValue">¥0</div>
-        </div>
-      </div>
-      <div class="cat-list" id="catList"></div>
-    </section>
-
-    <!-- AI 消费分析页 -->
-    <section class="page" id="page-ai">
       <div class="settings-header">
-        <h2>AI 消费分析</h2>
+        <h2>财报</h2>
       </div>
 
+      <div class="stats-view-wrap">
+        <div class="segmented" id="statsViewSeg" data-count="2" data-view="chart">
+          <div class="seg-thumb"></div>
+          <button class="seg active" data-view="chart">图表</button>
+          <button class="seg" data-view="ai">AI 分析</button>
+        </div>
+      </div>
+
+      <div id="chartPanel">
+
+        <div class="stats-head">
+          <button class="stats-title" id="statsTitle">本月结余 <span class="arrow">▼</span></button>
+          <div class="stats-total" id="statsTotal">¥0.00</div>
+          <div class="stats-subrow">
+            <span>收入 <b id="statsIncome">¥0.00</b></span>
+            <span>支出 <b id="statsExpense">¥0.00</b></span>
+          </div>
+        </div>
+
+        <div class="donut-wrap">
+          <svg class="donut" viewBox="0 0 140 140" id="donut"></svg>
+          <div class="donut-center">
+            <div class="lbl">支出</div>
+            <div class="val" id="donutValue">¥0</div>
+          </div>
+        </div>
+        <div class="cat-list" id="catList"></div>
+      </div>
+
+      <!-- 原「分析」页内容，已并入财报页 -->
+      <div id="aiPanel" hidden>
       <div class="month-nav ai-month-nav">
         <button class="month-label" id="aiMonthLabel">本月 <span class="arrow">▼</span></button>
       </div>
@@ -119,10 +115,13 @@
         <span class="ai-status-item" id="aiStatusNet">在线</span>
       </div>
 
-      <button class="ai-generate" id="aiGenerateBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/><path d="M18.5 2.5v3M17 4h3"/></svg>
-        <span id="aiGenerateText">生成分析</span>
-      </button>
+      <div class="ai-gen-row">
+        <button class="ai-generate" id="aiGenerateBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/><path d="M18.5 2.5v3M17 4h3"/></svg>
+          <span id="aiGenerateText">生成分析</span>
+        </button>
+        <button class="ai-clear" id="aiClearBtn">清除数据</button>
+      </div>
 
       <button class="ai-notes-row" id="aiNotesRow">
         <span class="ai-notes-main">
@@ -132,14 +131,7 @@
         <span class="ai-switch" id="aiNotesSwitch"><span class="ai-switch-knob"></span></span>
       </button>
 
-      <div class="ai-empty" id="aiEmpty">
-        <div class="ai-empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/><path d="M18.5 2.5v3M17 4h3"/></svg>
-        </div>
-        <div class="ai-empty-title" id="aiEmptyTitle">还没有分析结果</div>
-        <div class="ai-empty-text" id="aiEmptyText">点击上方「生成分析」，AI 会总结本月花费结构、指出异常波动并给出省钱建议。</div>
-        <button class="ai-empty-btn" id="aiEmptyAction" hidden>去设置 API Key</button>
-      </div>
+      <div id="aiEmpty"></div>
 
       <div class="ai-result" id="aiResult" hidden>
         <div class="ai-card">
@@ -161,12 +153,24 @@
           <button class="ai-action" id="aiRegenBtn">重新生成</button>
         </div>
       </div>
+      </div>
     </section>
 
     <!-- 设置页 -->
     <section class="page" id="page-settings">
       <div class="settings-header">
         <h2>设置</h2>
+        <button class="theme-toggle" id="themeToggle" aria-label="切换深色模式">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+          </svg>
+        </button>
       </div>
 
       <div class="settings-group">
@@ -301,25 +305,17 @@
       </svg>
       <span>明细</span>
     </button>
+    <button class="tab" data-tab="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      <span>设置</span>
+    </button>
     <button class="tab" data-tab="stats">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
       </svg>
-      <span>统计</span>
-    </button>
-    <button class="tab" data-tab="ai">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/>
-        <path d="M18.5 2.5v3M17 4h3"/>
-      </svg>
-      <span>分析</span>
-    </button>
-    <button class="tab" data-tab="settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
-      <span>设置</span>
+      <span>财报</span>
     </button>
   </nav>
 
@@ -490,6 +486,13 @@
       <button class="alert-btn" data-act="cancel">取消</button>
       <button class="alert-btn danger" id="confirmDeleteBtn">删除</button>
     </div>
+  </div>
+
+  <!-- 结余范围（取代原来的 年/月/周/天 分段控件） -->
+  <div class="action-sheet" id="periodSheet">
+    <div class="action-head">结余范围</div>
+    <div class="period-list" id="periodList"></div>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
   </div>
 
   <div class="action-sheet" id="monthPickerSheet">

@@ -46,9 +46,9 @@ Ledger 是一款**离线优先（offline-first）**的个人记账工具。它�
 | 层 | 技术 | 版本 | 说明 |
 |---|---|---|---|
 | 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
-| 后端 | Rust (edition 2021) | — | 7 个模块、约 2330 行，注册 **30 个 `#[tauri::command]`** |
+| 后端 | Rust (edition 2021) | — | 7 个模块，注册 **31 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
-| 前端 | 原生 HTML / CSS / ES Module | — | 0 依赖、0 构建步骤：`main.js` 3270 行、`styles.css` 2068 行、`index.html` 633 行 |
+| 前端 | 原生 HTML / CSS / ES Module | — | 0 npm 依赖、0 构建步骤：`main.js` 3448 行、`styles.css` 2142 行、`index.html` 636 行；Excel 解析库以静态文件随包分发于 `src/vendor/` |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
 | 凭据存储 | keyring（windows-native） | 3.x | 按平台条件编译 |
@@ -88,7 +88,7 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
   3. **仅内存**（进程内 `Mutex<Option<String>>`，退出即失效）
 - **Key 不回传前端**：界面只回显前 3 后 4 位掩码；旧版本的 `deepseek_api_key` 自动迁移
 - **备份不带凭据**：导出走临时副本库并清除 `ai_api_key` / `deepseek_api_key` / `ai_key_hint`，任一环节失败自动回退原始字节，保证导出功能本身不受影响
-- **导入是原子的**：临时文件 → `ATTACH DATABASE` → 校验 `sqlite_master` 中确有 `transactions` 表 → 事务内整体覆盖并提交 → `DETACH` 清理；缺 `budgets` / `templates` 的旧备份自动跳过对应表
+- **导入是原子的**：临时文件 → `ATTACH DATABASE` → 校验 `sqlite_master` 中确有 `transactions` 表 → 事务内整体覆盖并提交 → `DETACH` 清理；缺 `budgets` / `templates` / `categories` 的旧备份自动跳过对应表；分类按「合并」导入（同 id 覆盖），不整表清空，避免备份缺分类时把兜底分类「其他」一并删掉
 
 ---
 
@@ -107,8 +107,8 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 
 ## 工程质量
 
-- 后端 `src-tauri/src` 约 2330 行，含 **15 个 Rust 单元测试**（`ai.rs` 12 个、`keys.rs` 3 个）
-- 覆盖：围栏剥离、字段别名与非法输出兜底、Base URL 去重、本地地址识别、能力降级可重试性判定
+- 后端 `src-tauri/src` 含 **18 个 Rust 单元测试**（`service.rs` 4 个、`ai.rs` 11 个、`keys.rs` 3 个，另有 1 个联网测试默认 `ignore`）
+- 覆盖：围栏剥离、字段别名与非法输出兜底、Base URL 去重、本地地址识别、能力降级可重试性判定、id 唯一性（同毫秒连续写入不撞车）、分类删除的兜底校验
 - 用 `TcpListener` 起 mock OpenAI 服务端做**端到端降级验证**，另有一条真实 TLS 连通性测试
 - 圆环图手写 SVG（`stroke-dasharray` / `stroke-dashoffset` + 缓动过渡），不引入图表库
 
@@ -163,7 +163,8 @@ ledger/
 ├── src/                        前端（原生 HTML/CSS/JS）
 │   ├── index.html
 │   ├── styles.css
-│   └── main.js
+│   ├── main.js
+│   └── vendor/                 随包分发的第三方库（SheetJS，离线解析 Excel）
 ├── src-tauri/                  Rust 后端
 │   ├── src/
 │   │   ├── main.rs             入口

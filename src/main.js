@@ -128,9 +128,9 @@ function fmtMoneySigned(n) {
 
 function dayLabel(ds) {
   const t = todayStr();
-  if (ds === t) return '今天';
+  if (ds === t) return '今日';
   const y = fmtDate(addDays(new Date(), -1));
-  if (ds === y) return '昨天';
+  if (ds === y) return '昨日';
   const d = parseDate(ds);
   const now = new Date();
   const sameYear = d.getFullYear() === now.getFullYear();
@@ -228,12 +228,16 @@ function matchSearch(t, q) {
 /* ================= 明细页：月份状态 ================= */
 let viewMonth = todayStr().slice(0, 7);
 
+/** 月份入口现在在概览卡片上：卡片标签本身就是切换月份的按钮 */
 function updateMonthLabel() {
+  const el = $('#summaryLabel');
+  if (!el) return;
   const [y, m] = viewMonth.split('-').map(Number);
-  const curYM = todayStr().slice(0, 7);
-  const isCurrent = viewMonth === curYM;
-  const label = isCurrent ? '本月' : (y + '年' + m + '月');
-  $('#monthLabel').innerHTML = label + ' <span class="arrow">▼</span>';
+  const isCurrent = viewMonth === todayStr().slice(0, 7);
+  // 跨年的月份补上年份，避免「9月支出」看不出是哪一年
+  const isThisYear = y === new Date().getFullYear();
+  const label = isCurrent ? '本月' : (isThisYear ? (m + '月') : (y + '年' + m + '月'));
+  el.innerHTML = label + '支出 <span class="arrow">▼</span>';
 }
 
 /* ================= 首页渲染 ================= */
@@ -242,7 +246,6 @@ function renderHome() {
 
   const [y, m] = viewMonth.split('-').map(Number);
   const isCurrentMonth = viewMonth === todayStr().slice(0, 7);
-  $('#summaryLabel').textContent = isCurrentMonth ? '本月支出' : (m + '月支出');
 
   const q = normalizeForSearch(searchQuery.trim());
 
@@ -260,22 +263,24 @@ function renderHome() {
 
   renderBudget();
   renderQuickRow();
+  syncGestureHint(monthTx.length > 0);
 
   const listEl = $('#txList');
 
   if (!monthTx.length) {
     listEl.innerHTML = q
-      ? `<div class="empty rich">
-          <div class="empty-art"><span class="e-glow"></span>${IC('<path d="M20.2 20.2 15.9 15.9"/><circle cx="11" cy="11" r="6.6"/>')}</div>
-          <div class="empty-title">没有找到匹配的记录</div>
-          <div class="empty-sub">换个关键词试试</div>
-        </div>`
-      : `<div class="empty rich">
-          <div class="empty-art"><span class="e-glow"></span>${IC('<path d="M7 3h10v18l-2.5-1.7L12 20l-2.5-1.7L7 21V3Z"/><path d="M9.5 8h5M9.5 12h5"/>')}</div>
-          <div class="empty-title">${isCurrentMonth ? '本月还没有记账' : (m + '月还没有记录')}</div>
-          <div class="empty-sub">${isCurrentMonth ? '记下第一笔，从这里开始' : '这个月还没有任何记录'}</div>
-          ${isCurrentMonth ? '<button class="empty-btn" id="emptyCta">记一笔</button>' : ''}
-        </div>`;
+      ? emptyState({
+          icon: IC('<path d="M20.2 20.2 15.9 15.9"/><circle cx="11" cy="11" r="6.6"/>'),
+          title: '没有找到匹配的记录',
+          text: '换个关键词试试',
+        })
+      : emptyState({
+          icon: IC('<path d="M7 3h10v18l-2.5-1.7L12 20l-2.5-1.7L7 21V3Z"/><path d="M9.5 8h5M9.5 12h5"/>'),
+          title: isCurrentMonth ? '本月还没有记账' : (m + '月还没有记录'),
+          text: isCurrentMonth ? '记下第一笔，从这里开始' : '这个月还没有任何记录',
+          actionLabel: isCurrentMonth ? '记一笔' : '',
+          actionId: 'emptyCta',
+        });
     const cta = listEl.querySelector('#emptyCta');
     if (cta) cta.addEventListener('click', () => openSheet());
     return;
@@ -314,7 +319,7 @@ function renderHome() {
           ${selectMode ? `<div class="tx-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>` : ''}
           <div class="tx-icon" style="color:${cat.color}">${cat.icon}</div>
           <div class="tx-main">
-            <div class="tx-name">${cat.name}</div>
+            <div class="tx-name">${escapeHtml(cat.name)}</div>
             ${t.note ? `<div class="tx-note">${escapeHtml(t.note)}</div>` : ''}
           </div>
           <div class="tx-amount ${t.type === 'income' ? 'income' : ''}">${sign}${fmtMoney(t.amount)}</div>
@@ -335,6 +340,59 @@ function escapeHtml(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
+
+/** 全站统一空态。opts: { icon, title, text, actionLabel, actionId, variant: 'compact'|'card' } */
+function emptyState(opts) {
+  const o = opts || {};
+  const cls = 'empty-state' + (o.variant ? ' ' + o.variant : '');
+  const art = o.icon ? '<div class="es-art"><span class="es-glow"></span>' + o.icon + '</div>' : '';
+  const title = o.title ? '<div class="es-title">' + escapeHtml(o.title) + '</div>' : '';
+  const text = o.text ? '<div class="es-text">' + escapeHtml(o.text) + '</div>' : '';
+  const btn = o.actionLabel
+    ? '<button class="es-btn"' + (o.actionId ? ' id="' + o.actionId + '"' : '') + '>' + escapeHtml(o.actionLabel) + '</button>'
+    : '';
+  return '<div class="' + cls + '">' + art + title + text + btn + '</div>';
+}
+
+/* ================= 一次性手势提示 ================= */
+let gestureHintSeen = false;
+
+async function initGestureHint() {
+  try {
+    const v = await invoke('get_setting', { key: 'gesture_hint_seen' });
+    gestureHintSeen = v === '1';
+  } catch (e) {
+    gestureHintSeen = false;
+  }
+}
+
+/** 有记录且没看过提示时才显示；关掉后写进 settings，不再出现 */
+function syncGestureHint(hasRows) {
+  const el = $('#gestureHint');
+  if (!el) return;
+  const show = hasRows && !gestureHintSeen;
+  if (show === !el.hidden && (show ? el.classList.contains('show') : true)) return;
+  el.hidden = !show;
+  if (show) requestAnimationFrame(() => el.classList.add('show'));
+  else el.classList.remove('show');
+}
+
+async function dismissGestureHint() {
+  const el = $('#gestureHint');
+  gestureHintSeen = true;
+  if (el) {
+    el.classList.remove('show');
+    setTimeout(() => { el.hidden = true; }, 220);
+  }
+  try {
+    await invoke('set_setting', { key: 'gesture_hint_seen', value: '1' });
+  } catch (e) {
+    console.warn('记录手势提示状态失败', e);
+  }
+}
+
+const _gestureHintClose = $('#gestureHintClose');
+if (_gestureHintClose) _gestureHintClose.addEventListener('click', dismissGestureHint);
 
 /* ================= 侧滑删除 ================= */
 let openedRow = null;
@@ -598,7 +656,7 @@ function openBatchCat() {
     }
     html += `<div class="cat-grid">${CATEGORIES[kind].map(c => `
       <button class="cat-item" data-id="${c.id}" style="--c:${c.color}">
-        <span class="ic">${c.icon}</span><span>${c.name}</span>
+        <span class="ic">${c.icon}</span><span>${escapeHtml(c.name)}</span>
       </button>`).join('')}</div>`;
   });
   $('#batchCatBody').innerHTML = html;
@@ -652,7 +710,7 @@ function renderCatManage() {
     listEl.innerHTML = cats.map((c, i) => `
       <button class="cat-mgr-row" data-id="${c.id}">
         <span class="cm-icon" style="color:${c.color}">${c.icon}</span>
-        <span class="cm-name">${c.name}</span>
+        <span class="cm-name">${escapeHtml(c.name)}</span>
         <span class="cm-arrows">
           <span class="cm-move" data-move="up" data-id="${c.id}" ${i===0?'disabled':''}>↑</span>
           <span class="cm-move" data-move="down" data-id="${c.id}" ${i===cats.length-1?'disabled':''}>↓</span>
@@ -1221,9 +1279,11 @@ const catManageSheet   = $('#catManageSheet');
 const catEditSheet     = $('#catEditSheet');
 const aiKeySheet       = $('#aiKeySheet');
 const aiProviderSheet  = $('#aiProviderSheet');
+const periodSheet      = $('#periodSheet');
 const allPanels = [actionSheet, editTypeSheet, editAmountSheet, editDateSheet,
                    monthPickerSheet, weekPickerSheet, dayPickerSheet, batchCatSheet, budgetSheet,
-                   tplSheet, calSheet, catManageSheet, catEditSheet, aiKeySheet, aiProviderSheet];
+                   tplSheet, calSheet, catManageSheet, catEditSheet, aiKeySheet, aiProviderSheet,
+                   periodSheet];
 
 let activePanel = null;
 let modalOpenedAt = 0;   // 弹层打开时刻，用于忽略紧随其后的「幽灵 click」
@@ -1244,6 +1304,15 @@ function openModal(panel) {
   activePanel = panel;
   modalOpenedAt = Date.now();
 }
+
+/* 新增的三个面板（API Key / 服务商 / 结余范围）的「取消」按钮：
+   它们不像老面板那样各自绑过 data-act="cancel"，这里统一补上，否则点了没反应 */
+[aiKeySheet, aiProviderSheet, periodSheet].forEach(p => {
+  if (!p) return;
+  p.addEventListener('click', e => {
+    if (e.target.closest('[data-act="cancel"]')) closeModal();
+  });
+});
 
 function closeModal() {
   allPanels.forEach(p => p.classList.remove('show'));
@@ -1267,7 +1336,7 @@ function showActionSheet(id) {
   targetTxId = id;
   const cat = CAT_MAP[tx.category] || DEFAULT_CAT;
   const sign = tx.type === 'income' ? '+' : '-';
-  $('#actionHead').innerHTML = `${cat.icon}<span>${cat.name}　${sign}${fmtMoney(tx.amount)}</span>`;
+  $('#actionHead').innerHTML = `${cat.icon}<span>${escapeHtml(cat.name)}　${sign}${fmtMoney(tx.amount)}</span>`;
   openModal(actionSheet);
 }
 
@@ -1363,8 +1432,8 @@ function renderEditDateList() {
       html += `<div class="date-month-header">${y}年${m}月</div>`;
     }
     let label;
-    if (ds === todayStr()) label = '今天';
-    else if (ds === fmtDate(addDays(new Date(), -1))) label = '昨天';
+    if (ds === todayStr()) label = '今日';
+    else if (ds === fmtDate(addDays(new Date(), -1))) label = '昨日';
     else {
       const d = parseDate(ds);
       label = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日';
@@ -1540,8 +1609,8 @@ function openDayPicker(currentDate, onPick) {
   $('#dayPickerList').innerHTML = days.map(d => {
     const ds = fmtDate(d);
     let label;
-    if (ds === todayDs) label = '今天';
-    else if (ds === yesterdayDs) label = '昨天';
+    if (ds === todayDs) label = '今日';
+    else if (ds === yesterdayDs) label = '昨日';
     else {
       const wd = WEEK[d.getDay()];
       label = (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + wd;
@@ -1566,7 +1635,7 @@ $('#dayPickerList').addEventListener('click', e => {
 });
 
 /* ================= 明细页月份标签点击 ================= */
-$('#monthLabel').addEventListener('click', () => {
+$('#summaryLabel').addEventListener('click', () => {
   openMonthPicker(viewMonth, async (ym) => {
     viewMonth = ym;
     await loadBudget();
@@ -1629,8 +1698,8 @@ function periodLabel(period, ref) {
            (end.getMonth() + 1) + '月' + end.getDate() + '日';
   }
   if (period === 'day') {
-    if (fmtDate(ref) === fmtDate(today)) return '今天';
-    if (fmtDate(ref) === fmtDate(addDays(today, -1))) return '昨天';
+    if (fmtDate(ref) === fmtDate(today)) return '今日';
+    if (fmtDate(ref) === fmtDate(addDays(today, -1))) return '昨日';
     return (ref.getMonth() + 1) + '月' + ref.getDate() + '日';
   }
 }
@@ -1672,7 +1741,7 @@ function renderStats() {
   animateNumber(totalEl, Number(totalEl.dataset.val || 0), balance, 620, fmtMoneySigned);
   totalEl.dataset.val = balance;
 
-  $('#statsTitle').textContent  = range.label + '结余';
+  $('#statsTitle').innerHTML = range.label + '结余 <span class="arrow">▼</span>';
   $('#statsIncome').textContent  = fmtMoney(income);
   $('#statsExpense').textContent = fmtMoney(expense);
 
@@ -1691,7 +1760,11 @@ function renderStats() {
 
   if (!entries.length) {
     donut.innerHTML = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--fill)" stroke-width="16"/>`;
-    $('#catList').innerHTML = `<div class="empty" style="padding:36px 0"><span class="emoji">${IC('<circle cx="12" cy="12" r="8.2"/><path d="M12 12l3-3"/>')}</span>该周期还没有支出</div>`;
+    $('#catList').innerHTML = emptyState({
+      variant: 'compact',
+      icon: IC('<circle cx="12" cy="12" r="8.2"/><path d="M12 12l3-3"/>'),
+      title: '该周期还没有支出',
+    });
     return;
   }
 
@@ -1717,7 +1790,7 @@ function renderStats() {
     html += `<div class="cat-row" style="animation-delay:${i * 45}ms">
       <div class="cat-dot" style="background:${cat.color}"></div>
       <div class="cat-mid">
-        <div class="cat-line"><span>${cat.name}</span><span class="pct">${pct.toFixed(1)}%</span></div>
+        <div class="cat-line"><span>${escapeHtml(cat.name)}</span><span class="pct">${pct.toFixed(1)}%</span></div>
         <div class="cat-bar"><i data-w="${pct}" style="background:${cat.color}"></i></div>
       </div>
       <div class="cat-amt">${fmtMoney(amt)}</div>
@@ -1735,45 +1808,104 @@ function renderStats() {
   });
 }
 
-$('#periodSeg').addEventListener('click', e => {
-  const btn = e.target.closest('.seg');
-  if (!btn) return;
-  const newPeriod = btn.dataset.period;
+/* 「结余范围」面板：取代原来顶部那排 年/月/周/天 分段控件。
+   原来「切换具体月份/周/日期」藏在「点击已选中的分段按钮」上，几乎没人能发现；
+   现在统一收进这个面板：点当前项 = 换具体范围，点其它项 = 换周期。 */
+const PERIOD_ORDER = ['year', 'month', 'week', 'day'];
 
-  if (newPeriod === curPeriod) {
-    if (curPeriod === 'month') {
-      const curYM = statsDate.getFullYear() + '-' + pad2(statsDate.getMonth() + 1);
-      openMonthPicker(curYM, (ym) => {
-        const [y, m] = ym.split('-').map(Number);
-        statsDate = new Date(y, m - 1, 1);
-        renderStats();
-      });
-    } else if (curPeriod === 'week') {
-      openWeekPicker(statsDate, (startDs) => {
-        statsDate = parseDate(startDs);
-        renderStats();
-      });
-    } else if (curPeriod === 'day') {
-      openDayPicker(statsDate, (ds) => {
-        statsDate = parseDate(ds);
-        renderStats();
-      });
-    }
+function periodRangeHint(p) {
+  if (p === 'month') return '再次点击可切换具体月份';
+  if (p === 'week') return '再次点击可切换具体周';
+  if (p === 'day') return '再次点击可切换具体日期';
+  return '';
+}
+
+function openPeriodSheet() {
+  const list = $('#periodList');
+  if (!list) return;
+  list.innerHTML = PERIOD_ORDER.map(p => {
+    const on = p === curPeriod;
+    return '<button class="period-row' + (on ? ' sel' : '') + '" data-period="' + p + '">' +
+      '<span class="period-row-main">' +
+        '<span class="period-row-label">' + escapeHtml(periodLabel(p, statsDate)) + '结余</span>' +
+        (on ? '<span class="period-row-hint">' + periodRangeHint(p) + '</span>' : '') +
+      '</span>' +
+      '<span class="period-row-check">' + (on ? IC('<path d="M4.5 12.5l4.3 4.3L19.5 7.2"/>') : '') + '</span>' +
+    '</button>';
+  }).join('');
+  openModal(periodSheet);
+}
+
+/** 切换「具体范围」：月份 / 周 / 日期（年没有下级） */
+function openRangePicker(p) {
+  if (p === 'month') {
+    const curYM = statsDate.getFullYear() + '-' + pad2(statsDate.getMonth() + 1);
+    openMonthPicker(curYM, (ym) => {
+      const [y, m] = ym.split('-').map(Number);
+      statsDate = new Date(y, m - 1, 1);
+      renderStats();
+    });
+  } else if (p === 'week') {
+    openWeekPicker(statsDate, (startDs) => {
+      statsDate = parseDate(startDs);
+      renderStats();
+    });
+  } else if (p === 'day') {
+    openDayPicker(statsDate, (ds) => {
+      statsDate = parseDate(ds);
+      renderStats();
+    });
+  }
+}
+
+const _statsTitle = $('#statsTitle');
+if (_statsTitle) _statsTitle.addEventListener('click', openPeriodSheet);
+
+const _periodList = $('#periodList');
+if (_periodList) _periodList.addEventListener('click', e => {
+  const row = e.target.closest('[data-period]');
+  if (!row) return;
+  const p = row.dataset.period;
+  closeModal();
+  if (p === curPeriod) {
+    openRangePicker(p);
     return;
   }
-
-  curPeriod = newPeriod;
-  $('#periodSeg').dataset.period = curPeriod;
-  $$('#periodSeg .seg').forEach(s => s.classList.toggle('active', s.dataset.period === curPeriod));
+  curPeriod = p;
   renderStats();
+});
+
+/* ================= 财报页：图表 / AI 分析 视图切换 ================= */
+let statsView = 'chart';
+
+function setStatsView(view) {
+  statsView = (view === 'ai') ? 'ai' : 'chart';
+  const seg = $('#statsViewSeg');
+  if (seg) {
+    seg.dataset.view = statsView;
+    $$('#statsViewSeg .seg').forEach(b => b.classList.toggle('active', b.dataset.view === statsView));
+  }
+  const chart = $('#chartPanel');
+  const ai = $('#aiPanel');
+  if (chart) chart.hidden = statsView !== 'chart';
+  if (ai) ai.hidden = statsView !== 'ai';
+  if (statsView === 'ai') enterAiPage();
+  else renderStats();
+}
+
+const _statsViewSeg = $('#statsViewSeg');
+if (_statsViewSeg) _statsViewSeg.addEventListener('click', e => {
+  const b = e.target.closest('.seg');
+  if (!b) return;
+  setStatsView(b.dataset.view);
 });
 
 /* ================= Tab 切换 ================= */
 function switchTab(name) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
-  if (name === 'stats') setTimeout(renderStats, 60);
-  if (name === 'ai') enterAiPage();
+  // 财报页内含「图表 / AI 分析」两个视图，进入时按当前视图渲染
+  if (name === 'stats') setTimeout(() => setStatsView(statsView), 60);
   if (name === 'settings') { updateRecordCount(); renderBudgetSettingRow(); renderAiSettingsRows(); }
 }
 
@@ -1843,7 +1975,7 @@ function renderCatGrid() {
   $('#catGrid').innerHTML = list.map(c => `
     <button class="cat-item ${c.id === curCat ? 'active' : ''}" data-id="${c.id}" style="--c:${c.color}">
       <span class="ic">${c.icon}</span>
-      <span>${c.name}</span>
+      <span>${escapeHtml(c.name)}</span>
     </button>`).join('');
 }
 
@@ -1854,8 +1986,8 @@ function renderDateBtn() {
   const d = parseDate(curDate);
   const t = todayStr();
   let label;
-  if (curDate === t) label = '今天';
-  else if (curDate === fmtDate(addDays(new Date(), -1))) label = '昨天';
+  if (curDate === t) label = '今日';
+  else if (curDate === fmtDate(addDays(new Date(), -1))) label = '昨日';
   else if (d.getFullYear() === new Date().getFullYear()) label = `${d.getMonth() + 1}月${d.getDate()}日`;
   else label = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
   $('#dateBtn').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.2" width="16" height="15" rx="2.6"/><path d="M4 9.4h16M8.2 3.2v4M15.8 3.2v4"/></svg><span>${label}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
@@ -1975,7 +2107,10 @@ $('#segmented').addEventListener('click', e => {
   updateFavState();
 });
 
+let savingTx = false;   // 保存中：避免双击「保存」/ 连按回车重复记一笔
+
 async function saveTx() {
+  if (savingTx) return;
   const amt = parseFloat(amountStr);
   if (!amt || amt <= 0) {
     amountDisplay.classList.remove('shake');
@@ -1985,48 +2120,53 @@ async function saveTx() {
     return;
   }
 
-  // 修改常用项：只更新模板，不记账
-  if (editingTemplateId) {
+  savingTx = true;
+  try {
+    // 修改常用项：只更新模板，不记账
+    if (editingTemplateId) {
+      try {
+        await invoke('update_template', {
+          id: editingTemplateId,
+          txType: curType,
+          amount: amountStr,
+          category: curCat,
+          note: $('#noteInput').value.trim(),
+        });
+        await loadTemplates();
+        closeSheet();
+        renderQuickRow();
+        toast('常用项已更新');
+      } catch (e) {
+        toast('修改失败：' + e);
+      }
+      return;
+    }
+
     try {
-      await invoke('update_template', {
-        id: editingTemplateId,
+      await invoke('add_tx', {
         txType: curType,
         amount: amountStr,
         category: curCat,
         note: $('#noteInput').value.trim(),
+        date: curDate,
       });
-      await loadTemplates();
+      await refreshTxs();
       closeSheet();
-      renderQuickRow();
-      toast('常用项已更新');
+      const savedYM = curDate.slice(0, 7);
+      if (savedYM !== viewMonth && !searchQuery) viewMonth = savedYM;
+      renderHome();
+      if ($('#page-stats').classList.contains('active')) renderStats();
+      updateRecordCount();
+      const spent = todayExpense();
+      const msg = curType === 'income'
+        ? '收入已记录'
+        : (spent > 0 ? `支出已记录 · 今日已花 ${fmtMoneyShort(spent)}` : '支出已记录');
+      setTimeout(() => showSavedFeedback(msg), 220);
     } catch (e) {
-      toast('修改失败：' + e);
+      toast('保存失败：' + e);
     }
-    return;
-  }
-
-  try {
-    await invoke('add_tx', {
-      txType: curType,
-      amount: amountStr,
-      category: curCat,
-      note: $('#noteInput').value.trim(),
-      date: curDate,
-    });
-    await refreshTxs();
-    closeSheet();
-    const savedYM = curDate.slice(0, 7);
-    if (savedYM !== viewMonth && !searchQuery) viewMonth = savedYM;
-    renderHome();
-    if ($('#page-stats').classList.contains('active')) renderStats();
-    updateRecordCount();
-    const spent = todayExpense();
-    const msg = curType === 'income'
-      ? '收入已记录'
-      : (spent > 0 ? `支出已记录 · 今日已花 ${fmtMoneyShort(spent)}` : '支出已记录');
-    setTimeout(() => showSavedFeedback(msg), 220);
-  } catch (e) {
-    toast('保存失败：' + e);
+  } finally {
+    savingTx = false;
   }
 }
 
@@ -2090,6 +2230,7 @@ async function importBackup() {
     await refreshTxs();
     await loadBudget();
     await loadTemplates();
+    await loadCategories();   // 备份里带了分类，必须重新灌一次内存缓存，否则记录全显示成「其他」
     renderHome();
     renderStats();
     updateRecordCount();
@@ -2307,28 +2448,14 @@ function parseBillRows(rows) {
   const colAmount   = findCol(['金额']);
   const colStatus   = findCol(['当前状态', '交易状态']);
 
-  console.log('==== parseBillRows 诊断 ====');
-  console.log('表头行号 (headerRowIdx):', headerRowIdx);
-  console.log('表头内容:', JSON.stringify(headerRow));
-  console.log('列索引 colTime:', colTime, '| colDir:', colDir, '| colAmount:', colAmount);
-
   if (colTime < 0 || colAmount < 0) throw new Error('缺少必要列');
 
   const items = [];
   let skipped = 0;
-  let debugCount = 0;
 
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const row = rows[i] || [];
     const rawTime = String(row[colTime] || '').trim();
-
-    if (debugCount < 3) {
-      console.log(`--- 处理第 ${i + 1} 行 ---`);
-      console.log('  rawTime:', JSON.stringify(rawTime));
-      console.log('  row[colDir]:', JSON.stringify(String(row[colDir] || '').trim()));
-      console.log('  row[colAmount]:', JSON.stringify(String(row[colAmount] || '')));
-      debugCount++;
-    }
 
     if (!rawTime) continue;
 
@@ -2378,10 +2505,30 @@ function parseBillRows(rows) {
     });
   }
 
-  console.log('==== parseBillRows 结果 ====');
-  console.log('items:', items.length, ', skipped:', skipped);
-
   return { items, skipped };
+}
+
+// Excel 解析库（SheetJS）以静态文件随包分发：不联网、不依赖任何 CDN。
+// 首次导入 Excel 时才加载，避免拖慢冷启动（CSV 路径完全不碰它）。
+let xlsxLoading = null;
+
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (!xlsxLoading) {
+    xlsxLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = new URL('vendor/xlsx.full.min.js', document.baseURI).href;
+      s.onload = () => (window.XLSX
+        ? resolve(window.XLSX)
+        : reject(new Error('Excel 解析库加载后未就绪')));
+      s.onerror = () => {
+        xlsxLoading = null;   // 允许下次重试
+        reject(new Error('无法加载本地 Excel 解析库'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return xlsxLoading;
 }
 
 async function importBill() {
@@ -2414,27 +2561,22 @@ async function importBill() {
       const lines = text.split(/\r\n|\n|\r/);
       rows = lines.map(l => parseCsvLine(l));
     } else {
-      const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+      let XLSX;
+      try {
+        XLSX = await loadXLSX();
+      } catch (err) {
+        console.error('加载 Excel 解析库失败', err);
+        throw new Error('Excel 解析库加载失败，可把账单另存为 CSV 再导入');
+      }
       const wb = XLSX.read(bytes, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) throw new Error('Excel 里没有可读取的工作表');
       rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     }
 
-    // ========== 调试输出 ==========
-    console.log('========================================');
-    console.log('文件:', selected);
-    console.log('格式:', isCsv ? 'CSV' : 'xlsx');
-    console.log('总行数:', rows.length);
-    console.log('前 30 行:');
-    rows.slice(0, 30).forEach((r, i) => {
-      console.log(`第${i + 1}行:`, JSON.stringify(r));
-    });
-    console.log('========================================');
-    // ==============================
-
     const { items, skipped } = parseBillRows(rows);
     if (items.length === 0) {
-      toast('没有可导入的记录，请按 F12 看 Console');
+      toast('没有可导入的记录，可能全是退款或不计收支的交易');
       return;
     }
 
@@ -2464,8 +2606,10 @@ async function importBill() {
 
     const progress = showImportProgress(items.length);
     let done = 0;
+    let failed = 0;
     try {
-      for (const it of items) {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
         try {
           await invoke('add_tx', {
             txType: it.type,
@@ -2476,10 +2620,12 @@ async function importBill() {
           });
           done++;
         } catch (e) {
+          // 不再静默吞掉：失败条数要报给用户，否则「导入成功」其实是丢账
+          failed++;
           console.warn('单条导入失败', it, e);
         }
-        // 周期刷新一次，避免每条都重绘
-        if (done % 10 === 0 || done === items.length) progress.update(done);
+        // 按「处理进度」刷新，而不是按成功数：有失败时进度条也不会卡住
+        if ((i + 1) % 10 === 0 || i + 1 === items.length) progress.update(i + 1);
       }
     } finally {
       progress.close();
@@ -2489,10 +2635,12 @@ async function importBill() {
     renderHome();
     renderStats();
     updateRecordCount();
-    toast(`导入完成：${done} 条`);
+    toast(failed
+      ? `导入完成：成功 ${done} 条，失败 ${failed} 条`
+      : `导入完成：${done} 条`);
   } catch (e) {
     console.error('导入账单失败', e);
-    toast('导入失败：' + e.message);
+    toast('导入失败：' + (e && e.message ? e.message : e));
   }
 }
 
@@ -2987,22 +3135,25 @@ function renderAiPage() {
   }
   result.hidden = true;
   empty.hidden = false;
-  const action = $('#aiEmptyAction');
-  action.hidden = true;
+  const spark = IC('<path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/><path d="M18.5 2.5v3M17 4h3"/>');
+  let title = '还没有分析结果';
+  let text = '点击上方「生成分析」，AI 会总结本月花费结构、指出异常波动并给出省钱建议。';
+  let actionLabel = '';
   if (needKey) {
-    $('#aiEmptyTitle').textContent = '请先配置 API Key';
-    $('#aiEmptyText').textContent = '到「设置 → AI 消费分析 → API Key」填写后即可生成分析；也可以切换到本地 Ollama 模型，无需 Key。';
-    action.hidden = false;
+    title = '请先配置 API Key';
+    text = '到「设置 → AI 消费分析 → API Key」填写后即可生成分析；也可以切换到本地 Ollama 模型，无需 Key。';
+    actionLabel = '去设置 API Key';
   } else if (!online) {
-    $('#aiEmptyTitle').textContent = '需要联网才能使用 AI 分析';
-    $('#aiEmptyText').textContent = '当前处于离线状态，网络恢复后按钮会自动可用。';
+    title = '需要联网才能使用 AI 分析';
+    text = '当前处于离线状态，网络恢复后按钮会自动可用。';
   } else if (!hasData) {
-    $('#aiEmptyTitle').textContent = aiMonthLabel() + '暂无记录';
-    $('#aiEmptyText').textContent = '换一个月份，或先记一笔账。';
-  } else {
-    $('#aiEmptyTitle').textContent = '还没有分析结果';
-    $('#aiEmptyText').textContent = '点击上方「生成分析」，AI 会总结本月花费结构、指出异常波动并给出省钱建议。';
+    title = aiMonthLabel() + '暂无记录';
+    text = '换一个月份，或先记一笔账。';
   }
+  empty.innerHTML = emptyState({
+    variant: 'card', icon: spark, title: title, text: text,
+    actionLabel: actionLabel, actionId: 'aiEmptyAction',
+  });
 }
 
 async function loadAiCacheIfNeeded() {
@@ -3184,14 +3335,33 @@ if (_aiGenerateBtn) _aiGenerateBtn.addEventListener('click', generateAiAnalysis)
 const _aiRegenBtn = $('#aiRegenBtn');
 if (_aiRegenBtn) _aiRegenBtn.addEventListener('click', generateAiAnalysis);
 
+/* 清除已生成的分析结果（只清 AI 缓存，不动账目数据和 API Key） */
+const _aiClearBtn = $('#aiClearBtn');
+if (_aiClearBtn) _aiClearBtn.addEventListener('click', async () => {
+  const ok = await confirmDialog('清除已生成的分析结果？\n不影响账目数据，下次需要重新生成。');
+  if (!ok) return;
+  try {
+    const n = await invoke('ai_clear_analyses');
+    aiResult = null;
+    aiCacheMonth = aiMonth;   // 刚清过，避免立刻又去读一次缓存
+    renderAiPage();
+    toast(n > 0 ? '已清除 ' + n + ' 条分析结果' : '没有需要清除的分析结果');
+  } catch (e) {
+    console.error('清除分析结果失败', e);
+    toast('清除失败：' + e);
+  }
+});
+
 const _aiCopyBtn = $('#aiCopyBtn');
 if (_aiCopyBtn) _aiCopyBtn.addEventListener('click', copyAiResult);
 
 const _aiSaveBtn = $('#aiSaveBtn');
 if (_aiSaveBtn) _aiSaveBtn.addEventListener('click', saveAiResult);
 
-const _aiEmptyAction = $('#aiEmptyAction');
-if (_aiEmptyAction) _aiEmptyAction.addEventListener('click', () => switchTab('settings'));
+const _aiEmpty = $('#aiEmpty');
+if (_aiEmpty) _aiEmpty.addEventListener('click', e => {
+  if (e.target.closest('#aiEmptyAction')) switchTab('settings');
+});
 
 const _aiNotesRow = $('#aiNotesRow');
 if (_aiNotesRow) _aiNotesRow.addEventListener('click', async () => {
@@ -3248,6 +3418,7 @@ async function boot() {
   await loadBudget();
   await loadTemplates();
   await loadAiSettings();
+  await initGestureHint();
   renderHome();
   renderStats();
   updateRecordCount();
@@ -3257,9 +3428,16 @@ async function boot() {
 }
 boot();
 
+// 定时重绘只为跨天时刷新「今日 / 昨日」文案。原来无条件 renderHome()，
+// 而 .day-group 带入场动画，等于每分钟让整个列表重播一次动画，
+// 还会顺手把已经侧滑打开的那一行收回去。
+let lastRenderedDay = todayStr();
 setInterval(() => {
   if (document.hidden) return;
+  if (todayStr() === lastRenderedDay) return;
+  lastRenderedDay = todayStr();
   renderHome();
+  if ($('#page-stats').classList.contains('active')) renderStats();
 }, 60000);
 
 document.addEventListener('visibilitychange', () => {

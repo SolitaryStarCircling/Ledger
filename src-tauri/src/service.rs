@@ -1,5 +1,6 @@
 use chrono::{Local, NaiveDate};
 use rusqlite::{params, Connection, OptionalExtension};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::models::{Category, Template, Transaction};
 
@@ -60,9 +61,20 @@ fn now_ms() -> i64 {
         .as_millis() as i64
 }
 
+/// 进程内自增序号。id 必须叠加它：毫秒时间戳是 id 的唯一变量时，
+/// 同一毫秒内的两次写入会得到完全相同的 id，插入直接撞 `UNIQUE constraint failed`，
+/// 批量导入账单时表现为「部分记录被静默丢弃」。
+/// 从 1 起（而非 0）：seq=0 时算出来的低位与「旧版本只用毫秒」的 id 相同，
+/// 万一系统时间被回拨到同一毫秒会与历史记录撞车。
+static ID_SEQ: AtomicU64 = AtomicU64::new(1);
+
 fn gen_id() -> String {
     let ms = now_ms() as u64;
-    let r = ms.wrapping_mul(6364136223846793005) ^ 0x9e3779b97f4a7c15;
+    let seq = ID_SEQ.fetch_add(1, Ordering::Relaxed);
+    // seq 乘一个奇数在 2^32 上是双射，保证同一毫秒内 low32 彼此不同
+    let r = ms.wrapping_mul(6364136223846793005)
+        ^ 0x9e3779b97f4a7c15
+        ^ seq.wrapping_mul(0x2545F4914F6CDD1D);
     format!("{:x}{:08x}", ms, (r as u32))
 }
 
@@ -168,14 +180,22 @@ pub fn update_amount(conn: &Connection, id: &str, amount: &str) -> Result<Transa
 
 pub fn update_date(conn: &Connection, id: &str, date: &str) -> Result<Transaction, String> {
     let d = parse_date(date)?;
-    let diff = (d - today()).num_days().abs();
-    if diff > EDIT_DATE_MAX_DAYS {
-        return Err(format!("日期必须在今天前后 {} 天内", EDIT_DATE_MAX_DAYS));
+    let next = d.format("%Y-%m-%d").to_string();
+    // 导入的历史账单可能早于 365 天窗口，此时连「原样保存」都会被拒，所以日期没变就放行
+    let unchanged = get(conn, id)
+        .map_err(|e| e.to_string())?
+        .map(|t| t.date == next)
+        .unwrap_or(false);
+    if !unchanged {
+        let diff = (d - today()).num_days().abs();
+        if diff > EDIT_DATE_MAX_DAYS {
+            return Err(format!("日期必须在今天前后 {} 天内", EDIT_DATE_MAX_DAYS));
+        }
     }
     let changed = conn
         .execute(
             "UPDATE transactions SET date = ?1 WHERE id = ?2",
-            params![d.format("%Y-%m-%d").to_string(), id],
+            params![next, id],
         )
         .map_err(|e| e.to_string())?;
     if changed == 0 { return Err(format!("记录不存在: {}", id)); }
@@ -577,6 +597,26 @@ pub fn delete_category(
         return Err("默认「其他」分类不能删除".into());
     }
 
+    // fallback 必须是真实存在、且与待删分类同类型的分类：
+    // 否则记录会被挂到一个不存在的 id（界面显示成「其他」），或跨类型污染统计
+    if let Some(fb_id) = fallback {
+        if fb_id != id {
+            let fb_type: Option<String> = conn
+                .query_row(
+                    "SELECT type FROM categories WHERE id = ?1",
+                    params![fb_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(|e| e.to_string())?;
+            match fb_type {
+                Some(t) if t == cat_type => {}
+                Some(_) => return Err("目标分类的收支类型与当前分类不一致".into()),
+                None => return Err(format!("目标分类不存在: {}", fb_id)),
+            }
+        }
+    }
+
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     let affected = match fallback {
         Some(fb_id) if fb_id != id => tx
@@ -637,4 +677,125 @@ pub fn delete_setting(conn: &Connection, key: &str) -> Result<bool, String> {
         .execute("DELETE FROM settings WHERE key = ?1", params![key])
         .map_err(|e| format!("删除设置失败: {}", e))?;
     Ok(n > 0)
+}
+
+/// 按前缀删除设置项，返回删除条数。
+/// 注意：前缀里的 % 和 _ 必须转义，否则 "ai_analysis_" 的下划线会被当成 LIKE 通配符。
+pub fn delete_settings_by_prefix(conn: &Connection, prefix: &str) -> Result<usize, String> {
+    let esc = prefix
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let n = conn
+        .execute(
+            "DELETE FROM settings WHERE key LIKE ?1 ESCAPE '\\'",
+            params![format!("{}%", esc)],
+        )
+        .map_err(|e| format!("删除设置失败: {}", e))?;
+    Ok(n)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 只含 分类 / 流水 两张表的最小库
+    fn mem_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE categories (
+                id TEXT PRIMARY KEY, type TEXT NOT NULL CHECK (type IN ('expense','income')),
+                name TEXT NOT NULL, icon TEXT NOT NULL, color TEXT NOT NULL,
+                sort INTEGER NOT NULL, builtin INTEGER NOT NULL DEFAULT 0);
+             CREATE TABLE transactions (
+                id TEXT PRIMARY KEY, type TEXT NOT NULL CHECK (type IN ('expense','income')),
+                amount_cents INTEGER NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL,
+                date TEXT NOT NULL, created_at INTEGER NOT NULL);
+             INSERT INTO categories (id,type,name,icon,color,sort,builtin) VALUES
+                ('food','expense','吃喝','utensils','#FF9500',1,1),
+                ('other','expense','其他','grid','#8E8E93',2,1),
+                ('salary','income','工资','wallet','#00C7BE',1,1),
+                ('other_in','income','其他','grid','#8E8E93',2,1);",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn prefix_delete_treats_underscore_as_literal() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+            .unwrap();
+        for k in ["ai_analysis_2026-09", "ai_analysis_2026-10", "ai_analysisX2026-09", "ai_api_key"] {
+            conn.execute("INSERT INTO settings (key, value) VALUES (?1, 'x')", params![k])
+                .unwrap();
+        }
+        let n = delete_settings_by_prefix(&conn, "ai_analysis_").unwrap();
+        assert_eq!(n, 2, "只应删掉两条前缀匹配的");
+        let left: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key = 'ai_analysisX2026-09'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(left, 1, "下划线必须按字面匹配，不能被当成通配符");
+        let key_left: i64 = conn
+            .query_row("SELECT COUNT(*) FROM settings WHERE key = 'ai_api_key'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(key_left, 1, "API Key 不能被分析缓存清理误删");
+    }
+
+    /// 回归：id 只由毫秒时间戳决定时，同一毫秒内的连续写入会生成相同 id，
+    /// 插入撞 UNIQUE 约束失败 —— 批量导入账单时表现为部分记录被静默丢弃。
+    #[test]
+    fn ids_stay_unique_within_the_same_millisecond() {
+        let conn = mem_db();
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..500 {
+            let t = add(&conn, "expense", "1.00", "food", "", "2026-01-01")
+                .unwrap_or_else(|e| panic!("第 {} 条写入失败: {}", i, e));
+            assert!(seen.insert(t.id.clone()), "第 {} 条记录 id 与前面重复: {}", i, t.id);
+        }
+        assert_eq!(seen.len(), 500);
+    }
+
+    #[test]
+    fn delete_category_rejects_missing_or_cross_type_fallback() {
+        let conn = mem_db();
+        add(&conn, "expense", "9.90", "food", "", "2026-01-01").unwrap();
+
+        assert!(
+            delete_category(&conn, "food", Some("salary")).is_err(),
+            "收入分类不能当支出分类的兜底"
+        );
+        assert!(
+            delete_category(&conn, "food", Some("nope")).is_err(),
+            "不存在的兜底分类必须拒绝，否则记录会挂到孤儿 id 上"
+        );
+        let left: i64 = conn
+            .query_row("SELECT COUNT(*) FROM categories WHERE id = 'food'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 1, "被拒的删除不能改动分类表");
+        assert_eq!(
+            delete_category(&conn, "food", Some("other")).unwrap(),
+            1,
+            "同类型兜底应转移 1 条记录"
+        );
+    }
+
+    /// 回归：导入的历史账单可能早于 365 天窗口，此时「原样保存」不能被拒
+    #[test]
+    fn update_date_allows_resaving_an_out_of_window_date() {
+        let conn = mem_db();
+        let t = add(&conn, "expense", "5.00", "food", "", "1999-01-01").unwrap();
+
+        assert!(update_date(&conn, &t.id, "1999-01-01").is_ok(), "原样保存应放行");
+
+        let far = (today() - chrono::Duration::days(400)).format("%Y-%m-%d").to_string();
+        assert!(update_date(&conn, &t.id, &far).is_err(), "改成另一个超窗日期仍应拒绝");
+
+        let near = (today() - chrono::Duration::days(3)).format("%Y-%m-%d").to_string();
+        assert!(update_date(&conn, &t.id, &near).is_ok(), "窗口内日期应允许");
+    }
 }
