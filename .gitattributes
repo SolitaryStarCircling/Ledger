@@ -1,0 +1,25 @@
+# 统一换行符：仓库内一律按 LF 存储，避免 Windows / macOS 协作时出现「整文件都改了」的假 diff
+* text=auto eol=lf
+
+# Windows 批处理脚本必须保持 CRLF，否则可能无法执行
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件：禁止 Git 做任何换行转换或文本处理
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.icns  binary
+*.jar   binary
+*.zip   binary
+*.docx  binary
+*.xlsx  binary
+*.sqlite binary
+*.exe   binary
+*.dll   binary
+
+# 锁文件由工具自动生成，不计入 GitHub 语言统计
+Cargo.lock        linguist-generated
+package-lock.json linguist-generated

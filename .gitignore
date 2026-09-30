@@ -1,0 +1,48 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Rust / Cargo 编译产物（src-tauri/.gitignore 已含 /target/，此处兜底）
+target/
+
+# 打包产物
+src-tauri/gen/android/app/build
+src-tauri/gen/android/build
+src-tauri/gen/android/.gradle
+*.apk
+*.aab
+*.msi
+*.exe
+
+# 本地数据库（真实账本数据，绝不入库）
+*.sqlite
+*.sqlite3
+*.db
+
+# 本地备份与离线文档（不上传）
+备份源代码*.zip
+_backup_current/
+_backup_pre_cats/
+_backup_pre_frameless/
+ledger document/

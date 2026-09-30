@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>记账本</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <main class="content">
+
+    <!-- 明细页 -->
+    <section class="page active" id="page-home">
+      <div class="month-nav">
+        <button class="search-toggle" id="searchToggle" aria-label="搜索">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M21 21l-4.3-4.3"/>
+          </svg>
+        </button>
+        <button class="month-label" id="monthLabel">
+          本月 <span class="arrow">▼</span>
+        </button>
+        <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="search-bar" id="searchBar">
+        <svg class="search-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/>
+          <path d="M21 21l-4.3-4.3"/>
+        </svg>
+        <input type="text" id="searchInput" placeholder="搜索备注或分类…" autocomplete="off">
+        <button class="search-clear" id="searchClear" aria-label="清空">✕</button>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-label" id="summaryLabel">本月支出</div>
+        <div class="summary-amount" id="monthExpense">¥0.00</div>
+        <div class="summary-row">
+          <div class="item"><span class="s-dot"></span>收入 <b id="monthIncome">¥0.00</b></div>
+          <div class="item"><span class="s-dot"></span>结余 <b id="monthBalance">¥0.00</b></div>
+        </div>
+
+        <div class="summary-budget" id="budgetStrip">
+          <div class="sb-top">
+            <span class="sb-text" id="budgetText">设置本月预算</span>
+            <span class="sb-sub" id="budgetSub"></span>
+          </div>
+          <div class="sb-track"><div class="sb-fill" id="budgetFill"></div></div>
+        </div>
+      </div>
+      <div class="quick-row" id="quickRow"></div>
+      <div id="txList"></div>
+    </section>
+
+    <!-- 统计页 -->
+    <section class="page" id="page-stats">
+      <div class="stats-period">
+        <div class="segmented" id="periodSeg" data-count="4" data-period="month">
+          <div class="seg-thumb"></div>
+          <button class="seg" data-period="year">年</button>
+          <button class="seg active" data-period="month">月</button>
+          <button class="seg" data-period="week">周</button>
+          <button class="seg" data-period="day">天</button>
+        </div>
+      </div>
+
+      <div class="stats-head">
+        <div class="stats-title" id="statsTitle">本月结余</div>
+        <div class="stats-total" id="statsTotal">¥0.00</div>
+        <div class="stats-subrow">
+          <span>收入 <b id="statsIncome">¥0.00</b></span>
+          <span>支出 <b id="statsExpense">¥0.00</b></span>
+        </div>
+      </div>
+
+      <div class="donut-wrap">
+        <svg class="donut" viewBox="0 0 140 140" id="donut"></svg>
+        <div class="donut-center">
+          <div class="lbl">支出</div>
+          <div class="val" id="donutValue">¥0</div>
+        </div>
+      </div>
+      <div class="cat-list" id="catList"></div>
+    </section>
+
+    <!-- AI 消费分析页 -->
+    <section class="page" id="page-ai">
+      <div class="settings-header">
+        <h2>AI 消费分析</h2>
+      </div>
+
+      <div class="month-nav ai-month-nav">
+        <button class="month-label" id="aiMonthLabel">本月 <span class="arrow">▼</span></button>
+      </div>
+
+      <div class="ai-status">
+        <span class="ai-status-item" id="aiStatusModel">模型 deepseek-flash</span>
+        <span class="ai-status-sep">·</span>
+        <span class="ai-status-item" id="aiStatusKey">未配置 Key</span>
+        <span class="ai-status-sep">·</span>
+        <span class="ai-status-item" id="aiStatusNet">在线</span>
+      </div>
+
+      <button class="ai-generate" id="aiGenerateBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/><path d="M18.5 2.5v3M17 4h3"/></svg>
+        <span id="aiGenerateText">生成分析</span>
+      </button>
+
+      <button class="ai-notes-row" id="aiNotesRow">
+        <span class="ai-notes-main">
+          <span class="ai-notes-title">发送备注文本</span>
+          <span class="ai-notes-sub">关闭后只发送金额与分类，隐私更好，建议会更概括</span>
+        </span>
+        <span class="ai-switch" id="aiNotesSwitch"><span class="ai-switch-knob"></span></span>
+      </button>
+
+      <div class="ai-empty" id="aiEmpty">
+        <div class="ai-empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/><path d="M18.5 2.5v3M17 4h3"/></svg>
+        </div>
+        <div class="ai-empty-title" id="aiEmptyTitle">还没有分析结果</div>
+        <div class="ai-empty-text" id="aiEmptyText">点击上方「生成分析」，AI 会总结本月花费结构、指出异常波动并给出省钱建议。</div>
+        <button class="ai-empty-btn" id="aiEmptyAction" hidden>去设置 API Key</button>
+      </div>
+
+      <div class="ai-result" id="aiResult" hidden>
+        <div class="ai-card">
+          <div class="ai-card-title">结论</div>
+          <div class="ai-summary" id="aiSummary"></div>
+        </div>
+        <div class="ai-card" id="aiCatCard">
+          <div class="ai-card-title">花费结构</div>
+          <div class="ai-cats" id="aiCats"></div>
+        </div>
+        <div class="ai-card" id="aiAdviceCard">
+          <div class="ai-card-title">省钱建议</div>
+          <ol class="ai-advice" id="aiAdvice"></ol>
+        </div>
+        <div class="ai-meta" id="aiMeta"></div>
+        <div class="ai-actions">
+          <button class="ai-action" id="aiCopyBtn">复制</button>
+          <button class="ai-action" id="aiSaveBtn">保存</button>
+          <button class="ai-action" id="aiRegenBtn">重新生成</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置页 -->
+    <section class="page" id="page-settings">
+      <div class="settings-header">
+        <h2>设置</h2>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">预算</div>
+        <div class="settings-card">
+          <button class="settings-row" id="budgetSettingBtn">
+            <div class="settings-row-icon" style="color:#58619D"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.9"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">月度预算</div>
+              <div class="settings-row-sub" id="budgetSettingSub">未设置</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">AI 消费分析</div>
+        <div class="settings-card">
+
+          <button class="settings-row" id="aiProviderSettingBtn">
+            <div class="settings-row-icon" style="color:#8A678A"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/><path d="M18.5 2.5v3M17 4h3"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">服务商与模型</div>
+              <div class="settings-row-sub" id="aiProviderSub">DeepSeek · deepseek-flash</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+
+          <button class="settings-row" id="aiKeySettingBtn">
+            <div class="settings-row-icon" style="color:#58619D"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.2" cy="12" r="3.4"/><path d="M11.6 12H20"/><path d="M17.2 12v2.6"/><path d="M14.2 12v1.8"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">API Key</div>
+              <div class="settings-row-sub" id="aiKeySub">未配置</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+
+          <button class="settings-row" id="aiPrivacySettingBtn">
+            <div class="settings-row-icon" style="color:#5E7A63"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5.4" y="10.6" width="13.2" height="9" rx="2.2"/><path d="M8.6 10.6V8a3.4 3.4 0 0 1 6.8 0v2.6"/><path d="M12 14.4v2.2"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">隐私授权</div>
+              <div class="settings-row-sub" id="aiPrivacySub">未授权</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">数据</div>
+        <div class="settings-card">
+
+          <button class="settings-row" id="exportBtn">
+            <div class="settings-row-icon" style="color:#5E7A63"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4v10"/><path d="m8.2 7.2 3.8-3.8 3.8 3.8"/><path d="M4.4 14v4.2A1.6 1.6 0 0 0 6 19.8h12a1.6 1.6 0 0 0 1.6-1.6V14"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">导出数据</div>
+              <div class="settings-row-sub">保存完整数据到.sqlite文件</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+
+          <button class="settings-row" id="importBtn">
+            <div class="settings-row-icon" style="color:#58619D"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13.8v-10"/><path d="m8.2 10 3.8 3.8L15.8 10"/><path d="M4.4 14v4.2A1.6 1.6 0 0 0 6 19.8h12a1.6 1.6 0 0 0 1.6-1.6V14"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">导入数据</div>
+              <div class="settings-row-sub">从sqlite文件恢复数据（会覆盖当前）</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+
+          <button class="settings-row" id="importBillBtn">
+            <div class="settings-row-icon" style="color:#8A678A"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.6" width="16" height="14.8" rx="2.4"/><path d="M4 10.2h16"/><path d="M9.8 10.2v9.2"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">导入微信/支付宝账单</div>
+              <div class="settings-row-sub">从 .xlsx / .csv 文件批量导入</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+
+          <button class="settings-row" id="clearAllBtn">
+            <div class="settings-row-icon" style="color:#A2605C"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 7h15.2"/><path d="M9.6 7V5.6A1.6 1.6 0 0 1 11.2 4h1.6a1.6 1.6 0 0 1 1.6 1.6V7"/><path d="m6.6 7 .95 12.1a1.6 1.6 0 0 0 1.6 1.5h5.7a1.6 1.6 0 0 0 1.6-1.5L17.4 7"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">清空所有记录</div>
+              <div class="settings-row-sub">删除全部数据，无法撤销</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">分类</div>
+        <div class="settings-card">
+          <button class="settings-row" id="categoryManageBtn">
+            <div class="settings-row-icon" style="color:#5856D6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">分类管理</div>
+              <div class="settings-row-sub">新增、编辑、删除分类</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">关于</div>
+        <div class="settings-card">
+          <div class="settings-row static">
+            <div class="settings-row-icon" style="color:#8C867F"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 5.4A2 2 0 0 1 6.6 3.4h10.6a1.2 1.2 0 0 1 1.2 1.2v13.6a1.2 1.2 0 0 1-1.2 1.2H6.6a2 2 0 0 0-2 2V5.4Z"/><path d="M4.6 18.4a2 2 0 0 1 2-2h11.8"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">记账本</div>
+              <div class="settings-row-sub" id="recordCount">共 0 条记录</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <button class="fab" id="fab" aria-label="记一笔">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <nav class="tabbar">
+    <button class="tab active" data-tab="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/>
+      </svg>
+      <span>明细</span>
+    </button>
+    <button class="tab" data-tab="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+      </svg>
+      <span>统计</span>
+    </button>
+    <button class="tab" data-tab="ai">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 4l1.7 4.1a2 2 0 0 0 1.2 1.2L19 11l-4.1 1.7a2 2 0 0 0-1.2 1.2L12 18l-1.7-4.1a2 2 0 0 0-1.2-1.2L5 11l4.1-1.7a2 2 0 0 0 1.2-1.2L12 4Z"/>
+        <path d="M18.5 2.5v3M17 4h3"/>
+      </svg>
+      <span>分析</span>
+    </button>
+    <button class="tab" data-tab="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      <span>设置</span>
+    </button>
+  </nav>
+
+  <!-- 批量选择操作栏 -->
+  <div class="select-bar" id="selectBar">
+    <button class="select-all" id="selectAllBtn">全选</button>
+    <span class="select-count" id="selectCount">请选择记录</span>
+    <button class="select-cancel" id="selectCancelBtn">取消</button>
+    <button class="select-cat" id="selectCatBtn" disabled>改分类</button>
+  </div>
+
+  <!-- 记账面板 -->
+  <div class="sheet-mask" id="sheetMask"></div>
+  <div class="sheet" id="sheet">
+    <div class="sheet-grabber"></div>
+
+    <div class="sheet-header">
+      <button class="sheet-btn" id="sheetCancel">取消</button>
+      <div class="segmented" id="segmented" data-type="expense" data-count="2">
+        <div class="seg-thumb"></div>
+        <button class="seg active" data-type="expense">支出</button>
+        <button class="seg" data-type="income">收入</button>
+      </div>
+      <button class="sheet-btn primary" id="sheetSave">保存</button>
+    </div>
+
+    <div class="amount-display" id="amountDisplay">
+      <span class="cur">¥</span><span class="num" id="amountText">0</span>
+    </div>
+
+    <div class="sheet-body">
+      <div class="cat-grid" id="catGrid"></div>
+      <button class="manage-cat-btn" id="manageCatBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M19 12a7 7 0 0 0-.12-1.3l1.9-1.5-2-3.4-2.2.9a7 7 0 0 0-2.25-1.3L14 3h-4l-.33 2.4A7 7 0 0 0 7.4 6.7l-2.2-.9-2 3.4 1.9 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .12 1.3l-1.9 1.5 2 3.4 2.2-.9a7 7 0 0 0 2.25 1.3L10 21h4l.33-2.4a7 7 0 0 0 2.24-1.3l2.2.9 2-3.4-1.9-1.5c.08-.42.12-.86.12-1.3Z"/></svg>
+        <span>管理分类</span>
+      </button>
+      <button class="date-btn" id="dateBtn"></button>
+      <input class="note-input" id="noteInput" type="text" placeholder="添加备注…" maxlength="30">
+
+      <div class="fav-row">
+        <button class="fav-btn" id="favBtn">
+          <span class="fav-star" id="favStar">☆</span><span id="favText">收藏为常用</span>
+        </button>
+        <span class="fav-hint" id="favHint" hidden>正在修改常用项 · 保存后生效</span>
+      </div>
+    </div>
+
+    <div class="keypad" id="keypad">
+      <button data-k="1">1</button>
+      <button data-k="2">2</button>
+      <button data-k="3">3</button>
+      <button data-k="4">4</button>
+      <button data-k="5">5</button>
+      <button data-k="6">6</button>
+      <button data-k="7">7</button>
+      <button data-k="8">8</button>
+      <button data-k="9">9</button>
+      <button data-k=".">.</button>
+      <button data-k="0">0</button>
+      <button data-k="del" class="del">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 5H9L3 12l6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9.5l-5 5M12 9.5l5 5"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 记录操作弹层 -->
+  <div class="modal-mask" id="modalMask"></div>
+
+  <div class="action-sheet" id="actionSheet">
+    <div class="action-head" id="actionHead">记录</div>
+    <button class="action-btn" data-act="edit">修改</button>
+    <button class="action-btn" data-act="multi">多选</button>
+    <button class="action-btn danger" data-act="delete">删除</button>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
+  </div>
+
+  <div class="action-sheet" id="tplSheet">
+    <div class="action-head" id="tplHead">常用项</div>
+    <button class="action-btn" data-act="tplEdit">修改</button>
+    <button class="action-btn danger" data-act="tplDelete">删除</button>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
+  </div>
+
+  <div class="action-sheet" id="batchCatSheet">
+    <div class="action-head" id="batchCatHead">改分类</div>
+    <div class="batch-cat-body" id="batchCatBody"></div>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
+  </div>
+
+  <div class="action-sheet" id="editTypeSheet">
+    <div class="action-head">要修改哪一项？</div>
+    <button class="action-btn" data-act="editAmount">修改金额</button>
+    <button class="action-btn" data-act="editDate">修改时间</button>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
+  </div>
+
+  <div class="action-sheet" id="editAmountSheet">
+    <div class="action-head">修改金额</div>
+    <div class="edit-amount-display" id="editAmountDisplay">¥0</div>
+    <div class="edit-keypad" id="editKeypad">
+      <button data-k="1">1</button>
+      <button data-k="2">2</button>
+      <button data-k="3">3</button>
+      <button data-k="4">4</button>
+      <button data-k="5">5</button>
+      <button data-k="6">6</button>
+      <button data-k="7">7</button>
+      <button data-k="8">8</button>
+      <button data-k="9">9</button>
+      <button data-k=".">.</button>
+      <button data-k="0">0</button>
+      <button data-k="del" class="del">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 5H9L3 12l6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9.5l-5 5M12 9.5l5 5"/>
+        </svg>
+      </button>
+    </div>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="editAmountSave">保存</button>
+    </div>
+  </div>
+
+  <div class="action-sheet" id="budgetSheet">
+    <div class="action-head" id="budgetSheetHead">本月预算</div>
+    <div class="edit-amount-display" id="budgetAmountDisplay">¥0</div>
+    <div class="edit-keypad" id="budgetKeypad">
+      <button data-k="1">1</button>
+      <button data-k="2">2</button>
+      <button data-k="3">3</button>
+      <button data-k="4">4</button>
+      <button data-k="5">5</button>
+      <button data-k="6">6</button>
+      <button data-k="7">7</button>
+      <button data-k="8">8</button>
+      <button data-k="9">9</button>
+      <button data-k="0">0</button>
+      <button data-k="del" class="del">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 5H9L3 12l6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9.5l-5 5M12 9.5l5 5"/>
+        </svg>
+      </button>
+    </div>
+    <button class="budget-clear" id="budgetClear" hidden>清除本月预算</button>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="budgetSave">保存</button>
+    </div>
+  </div>
+
+  <div class="action-sheet" id="editDateSheet">
+    <div class="action-head">修改时间（前后一年）</div>
+    <div class="edit-date-list" id="editDateList"></div>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="editDateSave">保存</button>
+    </div>
+  </div>
+
+  <div class="alert-box" id="confirmBox">
+    <div class="alert-content">
+      <div class="alert-title">确认删除</div>
+      <div class="alert-msg">是否确认删除这条记录？<br>删除后无法恢复。</div>
+    </div>
+    <div class="alert-actions">
+      <button class="alert-btn" data-act="cancel">取消</button>
+      <button class="alert-btn danger" id="confirmDeleteBtn">删除</button>
+    </div>
+  </div>
+
+  <div class="action-sheet" id="monthPickerSheet">
+    <div class="action-head" id="monthPickerHead">选择月份（往前 12 个月 / 往后 3 个月）</div>
+    <div class="month-picker" id="monthPickerGrid"></div>
+  </div>
+
+  <div class="action-sheet" id="weekPickerSheet">
+    <div class="action-head" id="weekPickerHead">选择周（往前 12 周 / 往后 3 周）</div>
+    <div class="picker-list" id="weekPickerList"></div>
+  </div>
+
+  <div class="action-sheet" id="dayPickerSheet">
+    <div class="action-head" id="dayPickerHead">选择日期（往前 12 天 / 往后 3 天）</div>
+    <div class="picker-list" id="dayPickerList"></div>
+  </div>
+
+  <!-- 分类管理面板 -->
+  <div class="action-sheet" id="catManageSheet">
+    <div class="action-head">分类管理</div>
+    <div class="cat-mgr-body">
+      <div class="cat-mgr-group">
+        <div class="cat-mgr-title">支出分类</div>
+        <div class="cat-mgr-list" id="catMgrExpense"></div>
+      </div>
+      <div class="cat-mgr-group">
+        <div class="cat-mgr-title">收入分类</div>
+        <div class="cat-mgr-list" id="catMgrIncome"></div>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">完成</button>
+      <button class="action-btn primary" id="catAddBtn">＋ 新增分类</button>
+    </div>
+  </div>
+
+  <!-- 分类编辑/新增面板 -->
+  <div class="action-sheet" id="catEditSheet">
+    <div class="action-head" id="catEditHead">新增分类</div>
+    <div class="cat-edit-body">
+      <div class="cat-edit-field">
+        <label>类型</label>
+        <div class="segmented" id="catEditType" data-type="expense">
+          <div class="seg-thumb"></div>
+          <button class="seg active" data-kind="expense">支出</button>
+          <button class="seg" data-kind="income">收入</button>
+        </div>
+      </div>
+      <div class="cat-edit-preview">
+        <span class="cat-edit-icon" id="catEditPreview"></span>
+        <span class="cat-edit-name" id="catEditNamePlain"></span>
+      </div>
+      <div class="cat-edit-field">
+        <label>名称</label>
+        <input type="text" id="catEditName" maxlength="8" placeholder="分类名（最多 8 字）" autocomplete="off">
+      </div>
+      <div class="cat-edit-field">
+        <label>图标</label>
+        <div class="cat-edit-icons" id="catEditIcons"></div>
+      </div>
+      <div class="cat-edit-field">
+        <label>颜色</label>
+        <div class="cat-edit-colors" id="catEditColors"></div>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="action-btn danger" id="catEditDelete" hidden>删除分类</button>
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="catEditSave">保存</button>
+    </div>
+  </div>
+
+  <!-- DeepSeek API Key -->
+  <div class="action-sheet" id="aiKeySheet">
+    <div class="action-head">DeepSeek API Key</div>
+    <div class="ai-key-body">
+      <div class="ai-key-field" id="aiKeyField">
+        <input type="password" id="aiKeyInput" placeholder="sk-..." autocomplete="off" spellcheck="false">
+        <button class="ai-key-eye" id="aiKeyEye" aria-label="显示或隐藏 Key">
+          <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6.4 5.8 12 5.8 21.4 12 21.4 12 17.6 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>
+          <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l16 16"/><path d="M9.6 5.9A9.6 9.6 0 0 1 12 5.8c5.6 0 9.4 6.2 9.4 6.2a17 17 0 0 1-3.3 4"/><path d="M6.2 7.9A17.4 17.4 0 0 0 2.6 12S6.4 18.2 12 18.2c1.2 0 2.3-.3 3.3-.7"/></svg>
+        </button>
+      </div>
+      <div class="ai-key-hint" id="aiKeyHint">Key 只用于调用你填写的服务商接口，不经过任何第三方服务器。</div>
+      <div class="ai-field ai-storage-field">
+        <label>保存方式</label>
+        <div class="segmented" id="aiStorageSeg" data-count="3" data-storage="keyring">
+          <div class="seg-thumb"></div>
+          <button class="seg" data-storage="keyring">钥匙串</button>
+          <button class="seg" data-storage="db">本机数据库</button>
+          <button class="seg" data-storage="none">不保存</button>
+        </div>
+        <div class="ai-key-hint" id="aiStorageHint"></div>
+      </div>
+    </div>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="aiKeySave">保存</button>
+    </div>
+    <div class="ai-key-extra">
+      <button class="ai-key-link" id="aiKeyTest">测试连接</button>
+      <button class="ai-key-link danger" id="aiKeyClear" hidden>清除 Key</button>
+    </div>
+  </div>
+
+  <!-- AI 服务商与模型 -->
+  <div class="action-sheet" id="aiProviderSheet">
+    <div class="action-head">AI 服务商</div>
+    <div class="ai-provider-list" id="aiProviderList"></div>
+    <div class="ai-field">
+      <label>接口地址</label>
+      <input type="text" id="aiBaseUrlInput" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="ai-field">
+      <label>模型名</label>
+      <input type="text" id="aiModelInput" placeholder="例如 deepseek-flash" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="ai-key-hint" id="aiProviderNote"></div>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="aiProviderSave">保存</button>
+    </div>
+  </div>
+
+  <div class="action-sheet" id="calSheet">
+    <div class="cal-head">
+      <button class="cal-nav" id="calPrev" aria-label="上一月">‹</button>
+      <div class="cal-title" id="calTitle"></div>
+      <button class="cal-nav" id="calNext" aria-label="下一月">›</button>
+    </div>
+    <div class="cal-week">
+      <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+
+</div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
