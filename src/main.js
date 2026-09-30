@@ -2622,7 +2622,8 @@ async function importBill() {
         } catch (e) {
           // 不再静默吞掉：失败条数要报给用户，否则「导入成功」其实是丢账
           failed++;
-          console.warn('单条导入失败', it, e);
+          // 只记录错误本身：不把记录对象（含金额、备注）写进日志
+          console.warn('单条导入失败', e);
         }
         // 按「处理进度」刷新，而不是按成功数：有失败时进度条也不会卡住
         if ((i + 1) % 10 === 0 || i + 1 === items.length) progress.update(i + 1);
