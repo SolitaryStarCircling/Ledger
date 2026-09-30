@@ -503,8 +503,10 @@ html, body {
 .empty-state.compact .es-title { font-size: 14px; margin-bottom: 0; }
 .empty-state.compact .es-text { font-size: 12.5px; margin-bottom: 0; }
 
-/* 卡片版：用在 AI 分析面板 */
+/* 卡片版：用在 AI 分析面板；加 margin:0 抵掉明细页通用 .card 的左右 16px 内缩，
+   保证 AI 面板内所有块（生成行/备注行/空态卡片/结果卡片）共用同一条左右边界 */
 .empty-state.card {
+  margin: 0;
   padding: 26px 20px;
   background: var(--card); border-radius: var(--r-md);
   box-shadow: inset 0 0 0 0.5px var(--hairline);
@@ -521,10 +523,10 @@ html, body {
 
 .ai-clear {
   flex: none;
-  height: 42px;
+  height: 50px;
   padding: 0 18px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--r-md);
   background: color-mix(in srgb, var(--red) 12%, transparent);
   color: var(--red);
   font-size: 13.5px;
@@ -695,8 +697,17 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 环形图下方的小字：标注下方的分类明细表 */
+.chart-caption {
+  margin: 0 16px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: 0.6px;
+}
+
 .cat-list {
-  margin: 18px 16px 0;
+  margin: 0 16px;
   background: var(--glass-strong);
   backdrop-filter: blur(var(--blur)) saturate(var(--sat));
   -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
@@ -744,21 +755,33 @@ html, body {
   letter-spacing: -0.2px;
 }
 
-/* ============ Tab Bar ============ */
+/* ============ Tab Bar 悬浮胶囊 ============ */
 .tabbar {
-  flex: none;
-  align-self: center;            /* 在 .app 的纵向 flex 里居中，不贴左右边 */
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 18px);
+  transform: translateX(-50%);
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 6px;
-  border-radius: 999px;
-  /* 颜色沿用之前的白卡；只是把投影加重，让它在浅色底上真正浮起来 */
-  background: var(--card);
-  box-shadow: 0 14px 30px -12px rgba(28,26,23,0.32), 0 3px 8px -4px rgba(28,26,23,0.12), inset 0 0 0 0.5px var(--hairline);
-  margin-bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 10px);
+  width: fit-content;
+  /* 圆钮向下凸出 8px，故底部留白比胶囊本身多留 6px */
+  max-width: calc(100% - 36px);    /* 保证左右至少 ~18px 留白 */
   transition: opacity .3s ease;
+}
+/* 居中胶囊：只包裹 明细 / 记一笔 / 财报 三个键；高度固定 56px，
+   只容纳左右两个 tab，中间的圆形主钮靠负边距凸出胶囊之外 */
+.nav-capsule {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 56px;
+  padding: 0 6px;
+  width: fit-content;
+  border-radius: 999px;
+  /* 跟随主题：浅色白卡 / 深色深灰卡，配浮起投影 */
+  background: var(--card);
+  box-shadow: var(--sh-3), 0 4px 10px -4px rgba(28,26,23,0.18), inset 0 0 0 0.5px var(--hairline);
 }
 .tab {
   display: flex;
@@ -774,9 +797,32 @@ html, body {
   transition: color .22s ease, background .22s ease;
 }
 .tab svg { width: 22px; height: 22px; transition: transform .32s cubic-bezier(.34,1.56,.64,1); }
-.tab.active { color: var(--blue); background: var(--fill); }
+.tab.active { color: var(--blue); background: var(--blue-soft); }
 .tab.active svg { transform: scale(1.06); animation: tabPop .42s cubic-bezier(.34,1.56,.64,1); }
 .tab:active svg { transform: scale(0.9); }
+
+/* 设置：独立悬浮键，颜色与圆角对齐右侧胶囊的三个键 */
+.tab-settings {
+  position: fixed;
+  right: 24px;                       /* 距右边界留白，不贴 app 边缘 */
+  bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 20px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 58px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: var(--sh-3), 0 4px 10px -4px rgba(28,26,23,0.18), inset 0 0 0 0.5px var(--hairline);
+  color: var(--text3);
+  transition: color .22s ease, background .22s ease, opacity .3s ease;
+}
+.tab-settings span { display: block; font-size: 10px; font-weight: 500; letter-spacing: 0.1px; }
+.tab-settings svg { width: 22px; height: 22px; }
+.tab-settings.active { color: var(--blue); background: var(--blue-soft); }
 @keyframes tabPop {
   0% { transform: scale(1); }
   38% { transform: scale(1.18); }
@@ -784,22 +830,23 @@ html, body {
   100% { transform: scale(1.06); }
 }
 
-/* ============ 悬浮按钮 ============ */
+/* ============ 记一笔：居中的圆形主钮（明细/财报分列左右） ============ */
+/* 负垂直外边距抵消圆钮高度，让胶囊仍由 tab 决定高度，圆钮上下各凸出 8px */
 .fab {
-  position: absolute;
-  right: 20px;
-  bottom: 74px;
-  width: 56px; height: 56px;
+  flex: none;
+  position: relative;
+  z-index: 1;
+  margin: -8px 10px;
+  width: 72px; height: 72px;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  background: var(--text);
-  color: var(--bg);
+  background: #5B68A6;   /* 雾靛，略调亮去灰感，低饱和 */
+  color: #FFFFFF;
   box-shadow: var(--sh-blue), 0 2px 6px -2px rgba(0,0,0,0.20);
-  z-index: 30;
   transition: transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .28s, opacity .3s ease;
 }
 .fab:active { transform: scale(0.9); box-shadow: 0 4px 12px -6px rgba(0,0,0,0.40); }
-.fab svg { width: 26px; height: 26px; }
+.fab svg { width: 30px; height: 30px; }
 
 /* ============ 记账面板 ============ */
 .sheet-mask {
@@ -1546,7 +1593,8 @@ html, body {
 .app.select-mode .tx-content { cursor: default; }
 .app.select-mode .tx-row + .tx-row .tx-content::before { left: 96px; }
 .app.select-mode .fab,
-.app.select-mode .tabbar { display: none; }
+.app.select-mode .tabbar,
+.app.select-mode .tab-settings { display: none; }
 
 .tx-row.is-selected .tx-content { background: rgba(0,122,255,0.10); }
 @media (prefers-color-scheme: dark) {
@@ -2045,8 +2093,9 @@ html, body {
 .ai-result[hidden],
 .ai-card[hidden] { display: none; }
 
-/* 面板整体左右内缩：子元素用 width:100% 就能与卡片对齐 */
-#aiPanel { padding: 0 16px; }
+/* 面板整体左右内缩：32px = 明细页卡片的 16px 内缩 + 面板自身 16px，
+   让生成行 / 备注行 / 空态卡片 / 结果卡片全部落在同一条左右边界上 */
+#aiPanel { padding: 0 32px; }
 .ai-status {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   margin: 0 0 10px;
@@ -2072,7 +2121,8 @@ html, body {
 
 .ai-notes-row {
   display: flex; align-items: center; gap: 12px;
-  width: 100%; margin-top: 10px; padding: 12px 14px;
+  /* 上下间隔一致：与上方生成行、下方空态/结果卡片各留 10px */
+  width: 100%; margin: 10px 0; padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--card);
   box-shadow: inset 0 0 0 0.5px var(--hairline);
