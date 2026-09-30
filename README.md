@@ -1,10 +1,10 @@
 # Ledger · 个人记账本
 
-> 3 秒记一笔、完全离线的个人记账本。Rust + SQLite 单机内核，一套代码同时产出 **Windows 桌面端** 与 **Android** 应用。
+> 3 秒记一笔、完全离线的个人记账本。Rust + SQLite 单机内核，你的账本只存在你自己的设备上。
 
 Ledger 是一款**离线优先（offline-first）**的个人记账工具。它把「数据主权」当作首要约束：账目写入本机 `ledger.sqlite`，没有账号体系、没有云同步、默认不发任何网络请求，断网状态与联网状态功能完全等价。
 
-界面与交互向 iOS 原生看齐，实现上则刻意做减法——前端**零框架、零打包器**，`index.html` 通过一个 `type="module"` 标签直接加载 `main.js`，改完刷新即生效。不做引导流程、不做社交信息流、不做游戏化提醒，只有你的账目、你的数据和一张能看清钱去哪了的图表。
+界面以清晰、克制为原则，交互按单手操作的直觉来组织，实现上则刻意做减法——前端**零框架、零打包器**，`index.html` 通过一个 `type="module"` 标签直接加载 `main.js`，改完刷新即生效。不做引导流程、不做社交信息流、不做游戏化提醒，只有你的账目、你的数据和一张能看清钱去哪了的图表。
 
 ---
 
@@ -45,16 +45,16 @@ Ledger 是一款**离线优先（offline-first）**的个人记账工具。它�
 
 | 层 | 技术 | 版本 | 说明 |
 |---|---|---|---|
-| 跨端框架 | Tauri | 2.11 | 一套代码产出 Windows（NSIS）与 Android（APK / AAB） |
+| 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
 | 后端 | Rust (edition 2021) | — | 7 个模块、约 2330 行，注册 **30 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
 | 前端 | 原生 HTML / CSS / ES Module | — | 0 依赖、0 构建步骤：`main.js` 3270 行、`styles.css` 2068 行、`index.html` 633 行 |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
-| 凭据存储 | keyring（windows-native / apple-native） | 3.x | 按平台条件编译 |
-| 打包 | Tauri Bundler（NSIS / APK） | — | |
+| 凭据存储 | keyring（windows-native） | 3.x | 按平台条件编译 |
+| 打包 | Tauri Bundler | — | Android：Gradle；Windows：NSIS |
 
-TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Windows 与 Android 编译都**不需要** cmake、nasm 或 OpenSSL（启动时显式 `install_default()` 安装 crypto provider）。
+TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Windows 编译都**不需要** cmake、nasm 或 OpenSSL（启动时显式 `install_default()` 安装 crypto provider）。
 
 ---
 
@@ -82,8 +82,8 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Windows 与 And
 
 - **默认零网络**：不点「分析」就不会有任何出站请求
 - **本地 / 内网地址自动识别**：`localhost`、`127.0.0.1`、`::1`、`*.local`、`host.docker.internal`、`10.x`、`192.168.x`、`172.16–31.x`、`169.254.x` 视为自建服务，免 Key 且放宽超时（120s，云端 45s）
-- **API Key 三档存储**：
-  1. 系统凭据管理器（Windows 凭据管理器 / macOS 钥匙串）
+- **API Key 三档存储**（系统钥匙串仅 Windows 可用，Android 上自动回落到后两档）：
+  1. 系统凭据管理器（Windows 凭据管理器）
   2. 本机数据库
   3. **仅内存**（进程内 `Mutex<Option<String>>`，退出即失效）
 - **Key 不回传前端**：界面只回显前 3 后 4 位掩码；旧版本的 `deepseek_api_key` 自动迁移
@@ -119,16 +119,15 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Windows 与 And
 1. **Rust** —— <https://rustup.rs>
 2. **Node.js** 18+ —— 用于运行 Tauri CLI
 3. **Tauri 系统依赖** —— 见官方文档 <https://tauri.app/start/prerequisites/>
-   - Windows：Microsoft C++ 生成工具 + WebView2
    - Android：Android Studio、NDK、JDK 17，并配置 `ANDROID_HOME` / `NDK_HOME`
+   - Windows：Microsoft C++ 生成工具 + WebView2
 
 ## 快速开始
 
 ```bash
 npm install          # 安装 Tauri CLI 及前端依赖
 
-npm run tauri dev    # 开发模式，热重载
-npm run tauri build  # 打包当前平台的安装包
+npm run tauri dev    # 桌面端开发模式，热重载
 ```
 
 ### Android
@@ -141,12 +140,18 @@ npm run tauri android build    # 产出 APK / AAB
 
 > `src-tauri/gen/android/` 下的 Gradle 工程已纳入版本管理（Tauri 生成的 `.gitignore` 只排除 `build`、`.gradle` 等编译产物），因此克隆后可直接构建，无需重新 `init`。
 
+### Windows 桌面端
+
+```bash
+npm run tauri build    # 产出 NSIS / MSI 安装包
+```
+
 ### 目标平台与体积预算
 
 | 项 | 目标 |
 |---|---|
-| 平台 | Windows 10+ / Android 7.0+（API 24+） |
-| 体积 | PC 安装包 < 10 MB，APK < 50 MB |
+| 平台 | Android 7.0+（API 24+）/ Windows 10+ |
+| 体积 | APK < 50 MB，Windows 安装包 < 10 MB |
 | 性能 | 冷启动 < 2s，单笔记账 ≤ 3s |
 
 ---
@@ -181,8 +186,8 @@ ledger/
 
 数据库文件 `ledger.sqlite` 由系统分配的应用数据目录承载，**不在本仓库内**：
 
+- Android：应用私有数据目录
 - Windows：`%APPDATA%\<identifier>\ledger.sqlite`
-- Android：应用私有目录
 
 因此克隆仓库不会带上任何真实账目数据；请使用应用内的「备份」功能迁移数据。
 
