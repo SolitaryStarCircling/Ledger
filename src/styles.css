@@ -756,19 +756,24 @@ html, body {
 }
 
 /* ============ Tab Bar 悬浮胶囊 ============ */
+/* 整条栏只负责排布这一行：宽屏时只放居中的胶囊（设置单独悬浮在右侧），
+   窄屏时把设置并进同一行，两个控件永远不会互相挤压 */
 .tabbar {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 18px);
-  transform: translateX(-50%);
   z-index: 20;
   display: flex;
   align-items: center;
-  width: fit-content;
-  /* 圆钮向下凸出 8px，故底部留白比胶囊本身多留 6px */
-  max-width: calc(100% - 36px);    /* 保证左右至少 ~18px 留白 */
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  pointer-events: none;             /* 栏的空档不吃点击，底部列表依然可点 */
   transition: opacity .3s ease;
 }
+.nav-capsule,
+.tab-settings { pointer-events: auto; }
 /* 居中胶囊：只包裹 明细 / 记一笔 / 财报 三个键；高度固定 56px，
    只容纳左右两个 tab，中间的圆形主钮靠负边距凸出胶囊之外 */
 .nav-capsule {
@@ -794,6 +799,7 @@ html, body {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.1px;
+  white-space: nowrap;              /* 标签永远单行，放大系统字号也不会折成两行 */
   transition: color .22s ease, background .22s ease;
 }
 .tab svg { width: 22px; height: 22px; transition: transform .32s cubic-bezier(.34,1.56,.64,1); }
@@ -820,7 +826,7 @@ html, body {
   color: var(--text3);
   transition: color .22s ease, background .22s ease, opacity .3s ease;
 }
-.tab-settings span { display: block; font-size: 10px; font-weight: 500; letter-spacing: 0.1px; }
+.tab-settings span { display: block; font-size: 10px; font-weight: 500; letter-spacing: 0.1px; white-space: nowrap; }
 .tab-settings svg { width: 22px; height: 22px; }
 .tab-settings.active { color: var(--blue); background: var(--blue-soft); }
 @keyframes tabPop {
@@ -847,6 +853,21 @@ html, body {
 }
 .fab:active { transform: scale(0.9); box-shadow: 0 4px 12px -6px rgba(0,0,0,0.40); }
 .fab svg { width: 30px; height: 30px; }
+
+/* 窄屏手机（<400px）：胶囊 → 设置 并排成一组整体居中，
+   靠负边距凸出的圆钮在 320px 屏上依然留白充足；
+   宽屏保持「胶囊居中 + 设置悬浮右侧」的原始构图 */
+@media (max-width: 399px) {
+  .tabbar { gap: 10px; padding: 0 12px; }
+  .nav-capsule { padding: 0 5px; }
+  .nav-capsule .tab { padding: 6px 12px; }
+  .nav-capsule .fab { margin: -8px 8px; }
+  .tab-settings {
+    position: static;               /* 从悬浮键改为同行排布，宽度由内容决定 */
+    min-width: 54px;
+    padding: 9px 14px;
+  }
+}
 
 /* ============ 记账面板 ============ */
 .sheet-mask {
