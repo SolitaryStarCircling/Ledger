@@ -43,7 +43,14 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 
 - 分类增删改、拖拽排序、使用频率统计
 - 删除分类时记录可转移至兜底分类，不产生孤儿数据
+- 分类名同一类型下不重复；批量改分类时目标分类需与记录收支方向一致，避免统计串类
 - 月度预算设置
+- 账单导入支持自定义关键词自动归类规则（规则优先于内置关键词）
+
+**账户安全**
+
+- 应用锁：4-8 位数字密码，离开应用或切后台自动锁定，防止他人误看账目
+- PIN 以 Argon2id 哈希存本地，不联网、不落盘明文
 
 <strong>AI 消费分析（可选）</strong>
 
@@ -52,7 +59,8 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 **其他**
 
 - 浅色 / 深色主题切换，默认跟随系统
-- 数据库备份与恢复（导出 / 导入）
+- 数据导出：Excel (`.xlsx`) / CSV (`.csv`) / SQLite (`.sqlite`) 备份
+- 数据导入：Excel / CSV 账单、SQLite 恢复（覆盖当前）
 
 ---
 
@@ -61,11 +69,12 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 | 层 | 技术 | 版本 | 说明 |
 |---|---|---|---|
 | 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
-| 后端 | Rust (edition 2021) | — | 7 个模块，注册 **31 个 `#[tauri::command]`** |
+| 后端 | Rust (edition 2021) | — | 8 个模块，注册 **35 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
-| 前端 | 原生 HTML / CSS / ES Module | — | 0 npm 依赖、0 构建步骤：`main.js` 3448 行、`styles.css` 2142 行、`index.html` 636 行；Excel 解析库以静态文件随包分发于 `src/vendor/` |
+| 前端 | 原生 HTML / CSS / ES Module | — | 0 npm 依赖、0 构建步骤：`main.js` 3474 行、`styles.css` 2218 行、`index.html` 653 行；Excel 解析库以静态文件随包分发于 `src/vendor/` |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
+| 密码哈希 | argon2（Argon2id，纯 Rust） | 0.5 | 应用锁 PIN 哈希，无 C 依赖 |
 | 凭据存储 | keyring（windows-native） | 3.x | 按平台条件编译 |
 | 打包 | Tauri Bundler | — | Android：Gradle；Windows：NSIS |
 
@@ -85,7 +94,7 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 | `categories` | 分类 | `icon` / `color` / `sort` / `builtin`，支持拖拽排序 |
 | `budgets` | 月度预算 | `month` 主键 |
 | `templates` | 常用项 | 与流水同构，去掉日期 |
-| `settings` | 键值配置 | 主题、AI 服务商配置等 |
+| `settings` | 键值配置 | 主题、应用锁（`lock_enabled` / `lock_pin_hash`）、自定义分类规则（`cat_rules`）、AI 服务商配置等 |
 
 **兼容性处理**：首次启动写入 13 条预置分类，其 `id` 沿用历史硬编码值，保证旧记录 100% 兼容；预置写入只在建表那一次执行，用户删掉后不会复活。
 
@@ -96,6 +105,7 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 ## 隐私与凭据模型
 
 - **默认零网络**：不点「分析」就不会有任何出站请求
+- **应用锁 PIN 只存本地**：密码以 Argon2id 哈希存本机 `settings` 表，只做本地校验、不上云；它用于「防本机误看」，并不加密磁盘上的数据库文件（磁盘级加密属另一层能力，未越界实现）
 - **本地 / 内网地址自动识别**：`localhost`、`127.0.0.1`、`::1`、`*.local`、`host.docker.internal`、`10.x`、`192.168.x`、`172.16–31.x`、`169.254.x` 视为自建服务，免 Key 且放宽超时（120s，云端 45s）
 - **API Key 三档存储**（系统钥匙串仅 Windows 可用，Android 上自动回落到后两档）：
   1. 系统凭据管理器（Windows 凭据管理器）
@@ -122,8 +132,8 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 
 ## 工程质量
 
-- 后端 `src-tauri/src` 含 **18 个 Rust 单元测试**（`service.rs` 4 个、`ai.rs` 11 个、`keys.rs` 3 个，另有 1 个联网测试默认 `ignore`）
-- 覆盖：围栏剥离、字段别名与非法输出兜底、Base URL 去重、本地地址识别、能力降级可重试性判定、id 唯一性（同毫秒连续写入不撞车）、分类删除的兜底校验
+- 后端 `src-tauri/src` 含 **22 个 Rust 单元测试**（`service.rs` 6 个、`ai.rs` 11 个、`keys.rs` 3 个、`lock.rs` 2 个，另有 1 个联网测试默认 `ignore`）
+- 覆盖：围栏剥离、字段别名与非法输出兜底、Base URL 去重、本地地址识别、能力降级可重试性判定、id 唯一性（同毫秒连续写入不撞车）、分类删除的兜底校验、批量改分类的收支方向守卫、同一类型下分类名去重、PIN 哈希往返与格式校验
 - 用 `TcpListener` 起 mock OpenAI 服务端做**端到端降级验证**，另有一条真实 TLS 连通性测试
 - 圆环图手写 SVG（`stroke-dasharray` / `stroke-dashoffset` + 缓动过渡），不引入图表库
 
@@ -183,11 +193,12 @@ ledger/
 ├── src-tauri/                  Rust 后端
 │   ├── src/
 │   │   ├── main.rs             入口
-│   │   ├── lib.rs              Tauri 命令注册（30 个 invoke 命令）
+│   │   ├── lib.rs              Tauri 命令注册（35 个 invoke 命令）
 │   │   ├── models.rs           数据结构
 │   │   ├── db.rs               SQLite 连接与建表
 │   │   ├── service.rs          业务逻辑：金额 / 日期 / 分类校验、增删改查
 │   │   ├── keys.rs             API Key 存储（系统凭据管理器 / 数据库 / 内存）
+│   │   ├── lock.rs             应用锁：PIN 的 Argon2id 哈希与校验
 │   │   └── ai.rs               DeepSeek 等 OpenAI 风格接口客户端
 │   ├── capabilities/           权限声明
 │   ├── icons/                  应用图标
