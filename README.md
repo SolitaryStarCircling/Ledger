@@ -9,6 +9,16 @@
 
 ---
 
+## 界面预览
+
+<p align="center">
+  <img src="./docs/detail.png" width="220" alt="明细页"/>
+  <img src="./docs/account.png" width="220" alt="记账面板"/>
+  <img src="./docs/stats.png" width="220" alt="财报页"/>
+</p>
+
+---
+
 Ledger 是一款**离线优先（offline-first）**的个人记账工具。它把「数据主权」当作首要约束：账目写入本机 `ledger.sqlite`，没有账号体系、没有云同步、默认不发任何网络请求，断网状态与联网状态功能完全等价。
 
 界面以清晰、克制为原则，交互按单手操作的直觉来组织，实现上则刻意做减法——前端**零框架、零打包器**，`index.html` 通过一个 `type="module"` 标签直接加载 `main.js`，改完刷新即生效。不做引导流程、不做社交信息流、不做游戏化提醒，只有你的账目、你的数据和一张能看清钱去哪了的图表。
