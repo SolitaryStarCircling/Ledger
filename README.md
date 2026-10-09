@@ -11,11 +11,9 @@
 
 ## 界面预览
 
-<div align="center" style="display:flex; flex-wrap:wrap; gap:16px; justify-content:center;">
-  <img src="./docs/detail.png" width="230" alt="明细页" style="border-radius:14px; box-shadow:0 6px 20px rgba(0,0,0,0.08);"/>
-  <img src="./docs/account.png" width="230" alt="记账面板" style="border-radius:14px; box-shadow:0 6px 20px rgba(0,0,0,0.08);"/>
-  <img src="./docs/stats.png" width="230" alt="财报页" style="border-radius:14px; box-shadow:0 6px 20px rgba(0,0,0,0.08);"/>
-</div>
+| 明细页 | 记账面板 | 财报页 |
+|:---:|:---:|:---:|
+| <img src="./docs/detail.png" width="230" alt="明细页"/> | <img src="./docs/account.png" width="230" alt="记账面板"/> | <img src="./docs/stats.png" width="230" alt="财报页"/> |
 
 ---
 
