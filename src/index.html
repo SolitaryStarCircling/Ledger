@@ -223,32 +223,37 @@
       </div>
 
       <div class="settings-group">
+        <div class="settings-group-title">安全</div>
+        <div class="settings-card">
+          <button class="settings-row" id="lockSettingBtn">
+            <div class="settings-row-icon" style="color:#7A6B8C"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5.4" y="10.8" width="13.2" height="9.2" rx="2.2"/><path d="M8.6 10.8V8a3.4 3.4 0 0 1 6.8 0v2.8"/><path d="M12 14.6v2.2"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">密码</div>
+              <div class="settings-row-sub" id="lockSettingSub">设置密码，防止他人误看</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-group">
         <div class="settings-group-title">数据</div>
         <div class="settings-card">
 
-          <button class="settings-row" id="exportBtn">
+          <button class="settings-row" id="exportDataBtn">
             <div class="settings-row-icon" style="color:#5E7A63"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4v10"/><path d="m8.2 7.2 3.8-3.8 3.8 3.8"/><path d="M4.4 14v4.2A1.6 1.6 0 0 0 6 19.8h12a1.6 1.6 0 0 0 1.6-1.6V14"/></svg></div>
             <div class="settings-row-main">
               <div class="settings-row-title">导出数据</div>
-              <div class="settings-row-sub">保存完整数据到.sqlite文件</div>
+              <div class="settings-row-sub">导出为 Excel / CSV / SQLite</div>
             </div>
             <div class="settings-row-arrow">›</div>
           </button>
 
-          <button class="settings-row" id="importBtn">
-            <div class="settings-row-icon" style="color:#58619D"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13.8v-10"/><path d="m8.2 10 3.8 3.8L15.8 10"/><path d="M4.4 14v4.2A1.6 1.6 0 0 0 6 19.8h12a1.6 1.6 0 0 0 1.6-1.6V14"/></svg></div>
+          <button class="settings-row" id="importDataBtn">
+            <div class="settings-row-icon" style="color:#8A678A"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13.8v-10"/><path d="m8.2 10 3.8 3.8L15.8 10"/><path d="M4.4 14v4.2A1.6 1.6 0 0 0 6 19.8h12a1.6 1.6 0 0 0 1.6-1.6V14"/></svg></div>
             <div class="settings-row-main">
               <div class="settings-row-title">导入数据</div>
-              <div class="settings-row-sub">从sqlite文件恢复数据（会覆盖当前）</div>
-            </div>
-            <div class="settings-row-arrow">›</div>
-          </button>
-
-          <button class="settings-row" id="importBillBtn">
-            <div class="settings-row-icon" style="color:#8A678A"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.6" width="16" height="14.8" rx="2.4"/><path d="M4 10.2h16"/><path d="M9.8 10.2v9.2"/></svg></div>
-            <div class="settings-row-main">
-              <div class="settings-row-title">导入微信/支付宝账单</div>
-              <div class="settings-row-sub">从 .xlsx / .csv 文件批量导入</div>
+              <div class="settings-row-sub">从 Excel / CSV / SQLite 导入</div>
             </div>
             <div class="settings-row-arrow">›</div>
           </button>
@@ -273,6 +278,14 @@
             <div class="settings-row-main">
               <div class="settings-row-title">分类管理</div>
               <div class="settings-row-sub">新增、编辑、删除分类</div>
+            </div>
+            <div class="settings-row-arrow">›</div>
+          </button>
+          <button class="settings-row" id="catRuleBtn">
+            <div class="settings-row-icon" style="color:#A1774F"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 5 6.5v5c0 4.1 2.7 7.5 7 8.9 4.3-1.4 7-4.8 7-8.9v-5l-7-2.9Z"/><path d="M9 12l2.1 2.1L15.2 9.9"/></svg></div>
+            <div class="settings-row-main">
+              <div class="settings-row-title">自动分类规则</div>
+              <div class="settings-row-sub" id="catRuleSub">自定义关键词匹配规则</div>
             </div>
             <div class="settings-row-arrow">›</div>
           </button>
@@ -568,6 +581,62 @@
     </div>
   </div>
 
+  <!-- 自动分类规则管理 -->
+  <div class="action-sheet" id="catRuleSheet">
+    <div class="action-head">自动分类规则</div>
+    <div class="cat-rule-desc">导入账单时，按关键词自动归类（自定义规则优先于内置关键词）。顺序即优先级。</div>
+    <div class="cat-rule-list" id="catRuleList"></div>
+    <div class="cat-rule-field">
+      <input type="text" id="catRuleKw" placeholder="包含关键词，如：沙县" maxlength="20" autocomplete="off" spellcheck="false">
+      <select id="catRuleCat"></select>
+      <button class="cat-rule-add" id="catRuleAdd">＋ 添加</button>
+    </div>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">完成</button>
+    </div>
+  </div>
+
+  <!-- 导出数据格式选择 -->
+  <div class="action-sheet" id="exportFormatSheet">
+    <div class="action-head">导出数据</div>
+    <button class="action-btn" data-exportfmt="xlsx">Excel (.xlsx) 表格</button>
+    <button class="action-btn" data-exportfmt="csv">CSV (.csv) 表格</button>
+    <button class="action-btn" data-exportfmt="sqlite">SQLite (.sqlite) 备份</button>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
+  </div>
+
+  <!-- 导入数据格式选择 -->
+  <div class="action-sheet" id="importFormatSheet">
+    <div class="action-head">导入数据</div>
+    <button class="action-btn" data-importfmt="xlsx">Excel (.xlsx) 账单</button>
+    <button class="action-btn" data-importfmt="csv">CSV (.csv) 账单</button>
+    <button class="action-btn" data-importfmt="sqlite">SQLite (.sqlite) 恢复到当前（覆盖）</button>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
+  </div>
+
+  <!-- 开启应用锁确认（仿手机系统询问） -->
+  <div class="action-sheet" id="lockEnableSheet">
+    <div class="action-head">开启密码</div>
+    <div class="lock-enable-msg">设置密码后，离开应用或切到后台会要求输入密码解锁，防止他人误看账目。</div>
+    <button class="action-btn primary" data-lkact="confirmEnable">开启并设置密码</button>
+    <button class="action-btn cancel" data-lkact="cancel">取消</button>
+  </div>
+
+  <!-- 应用锁管理 -->
+  <div class="action-sheet" id="lockManageSheet">
+    <div class="action-head">密码</div>
+    <button class="action-btn" data-lkact="change">修改密码</button>
+    <button class="action-btn danger" data-lkact="disable">关闭锁定</button>
+    <button class="action-btn cancel" data-lkact="cancel">取消</button>
+  </div>
+
+  <!-- 关闭应用锁确认 -->
+  <div class="action-sheet" id="lockConfirmSheet">
+    <div class="action-head">关闭应用锁</div>
+    <button class="action-btn danger" data-lkact="confirmDisable">关闭（需重新设置才能开启）</button>
+    <button class="action-btn cancel" data-lkact="cancel">取消</button>
+  </div>
+
   <!-- DeepSeek API Key -->
   <div class="action-sheet" id="aiKeySheet">
     <div class="action-head">DeepSeek API Key</div>
@@ -632,6 +701,21 @@
     <div class="cal-grid" id="calGrid"></div>
   </div>
 
+</div>
+
+<!-- 应用锁遮罩 -->
+<div class="lock-overlay" id="lockOverlay" hidden>
+  <div class="lock-front">
+    <div class="lock-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4"/><path d="M8.4 10.5V7.8a3.6 3.6 0 0 1 7.2 0v2.7"/><path d="M12 14v2.4"/></svg>
+    </div>
+    <div class="lock-title" id="lockTitle">记账本</div>
+    <div class="lock-sub" id="lockSub">输入密码解锁</div>
+    <div class="lock-dots" id="lockDots"></div>
+    <div class="lock-error" id="lockError"></div>
+    <div class="lock-keys" id="lockKeys"></div>
+    <button class="lock-cancel" id="lockCancel" hidden>返回</button>
+  </div>
 </div>
 
 <script type="module" src="./main.js"></script>

@@ -26,6 +26,10 @@ chrono = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["json", "charset", "http2", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
+# 应用锁：PIN 用 Argon2id 哈希存本地，纯 Rust，无外部依赖链
+argon2 = "0.5"
+rand = "0.8"
+
 # API Key 存系统凭据管理器（Windows 凭据管理器 / macOS 钥匙串）；其它平台回退到数据库
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", default-features = false, features = ["windows-native"] }

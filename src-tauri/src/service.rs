@@ -223,16 +223,40 @@ pub fn update_category_batch(
     if ids.is_empty() {
         return Err("没有选中的记录".into());
     }
-    let valid: bool = conn
+    // 分类是「同一套 id 池」里的标签，但它本身带指向（支出/收入）。
+    // 批量改分类只改标签、不改收支方向，所以目标分类必须与每条被选记录同向，
+    // 否则支出记录会被贴上收入分类（或反之），导致统计串类。
+    let cat_type: Option<String> = conn
         .query_row(
-            "SELECT COUNT(*) FROM categories WHERE id = ?1",
+            "SELECT type FROM categories WHERE id = ?1",
             params![category],
-            |r| r.get::<_, i64>(0),
+            |r| r.get(0),
         )
-        .map(|n| n > 0)
-        .unwrap_or(false);
-    if !valid {
-        return Err(format!("未知分类: {}", category));
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let cat_type = cat_type.ok_or_else(|| format!("未知分类: {}", category))?;
+
+    let placeholders_check = vec!["?"; ids.len()].join(",");
+    let mut stmt_check = conn
+        .prepare(&format!(
+            "SELECT DISTINCT type FROM transactions WHERE id IN ({})",
+            placeholders_check
+        ))
+        .map_err(|e| e.to_string())?;
+    let rows = stmt_check
+        .query_map(rusqlite::params_from_iter(ids.iter().map(|s| s.as_str())), |r| {
+            r.get::<_, String>(0)
+        })
+        .map_err(|e| e.to_string())?;
+    let mut record_types = Vec::new();
+    for r in rows {
+        record_types.push(r.map_err(|e| e.to_string())?);
+    }
+    if record_types.is_empty() {
+        return Err("没有找到选中的记录".into());
+    }
+    if record_types.iter().any(|t| t != &cat_type) {
+        return Err("选中的记录包含支出和收入，不能统一改成同一个分类".into());
     }
 
     let placeholders = vec!["?"; ids.len()].join(",");
@@ -504,6 +528,18 @@ pub fn add_category(
     color: &str,
 ) -> Result<Category, String> {
     let name = validate_cat_fields(kind, name, icon, color)?;
+    // 同类型下分类名不允许重复，避免同名分类导致界面/统计/AI 取色混乱
+    let name_collide: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM categories WHERE type = ?1 AND name = ?2 COLLATE NOCASE",
+            params![kind, name],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .unwrap_or(false);
+    if name_collide {
+        return Err(format!("已存在同名「{}」的分类", name));
+    }
     // 生成唯一 id，若撞车则重试
     let mut id = gen_id();
     let mut guard = 0;
@@ -544,6 +580,18 @@ pub fn update_category(
         .query_row("SELECT type FROM categories WHERE id = ?1", params![id], |r| r.get(0))
         .map_err(|_| "分类不存在".to_string())?;
     let name = validate_cat_fields(&kind, name, icon, color)?;
+    // 改名时同类型下不允许重名（排除自身，允许不改名时的自碰撞）
+    let name_collide: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM categories WHERE type = ?1 AND name = ?2 COLLATE NOCASE AND id <> ?3",
+            params![kind, name, id],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .unwrap_or(false);
+    if name_collide {
+        return Err(format!("已存在同名「{}」的分类", name));
+    }
     let changed = conn
         .execute(
             "UPDATE categories SET name = ?1, icon = ?2, color = ?3 WHERE id = ?4",
@@ -797,5 +845,73 @@ mod tests {
 
         let near = (today() - chrono::Duration::days(3)).format("%Y-%m-%d").to_string();
         assert!(update_date(&conn, &t.id, &near).is_ok(), "窗口内日期应允许");
+    }
+
+    /// 回归(Bug1)：批量改分类时，目标分类必须与每条被选记录同向，
+    /// 否则支出记录会被贴上收入分类（或反之）导致统计串类。
+    #[test]
+    fn batch_category_must_match_record_type() {
+        let conn = mem_db();
+        add(&conn, "expense", "10.00", "food", "", "2026-01-01").unwrap();
+        add(&conn, "income", "5.00", "salary", "", "2026-01-01").unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT id, type FROM transactions")
+            .unwrap();
+        let all: Vec<(String, String)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let ids: Vec<String> = all.iter().map(|(id, _)| id.clone()).collect();
+        let exp_ids: Vec<String> = all
+            .iter()
+            .filter(|(_, t)| t == "expense")
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        assert!(
+            update_category_batch(&conn, &ids, "salary").is_err(),
+            "支出记录不能统一改成收入分类"
+        );
+        assert!(
+            update_category_batch(&conn, &ids, "food").is_err(),
+            "收入记录不能统一改成支出分类"
+        );
+        assert_eq!(
+            update_category_batch(&conn, &exp_ids, "other").unwrap(),
+            1,
+            "同类型的支出记录应能正常批量改分类"
+        );
+    }
+
+    /// 回归(Bug2)：同一类型下分类名不允许重复，跨类型互不干扰。
+    #[test]
+    fn category_name_unique_within_type() {
+        let conn = mem_db();
+
+        // mem_db 已预置支出分类「吃喝」(id=food)
+        assert!(
+            add_category(&conn, "expense", "吃喝", "utensils", "#FF9500").is_err(),
+            "同类型已存在「吃喝」应拒绝"
+        );
+        assert!(
+            add_category(&conn, "expense", "吃 喝", "utensils", "#FF9500").is_ok(),
+            "名字 trim 后不同不应误伤"
+        );
+        assert!(
+            add_category(&conn, "income", "吃喝", "utensils", "#FF9500").is_ok(),
+            "收入类型允许同名，不应跨类型干预"
+        );
+
+        // 改名碰撞：food 想改成支出分类「其他」(id=other 已占用)；改成「伙食」则允许
+        assert!(
+            update_category(&conn, "food", "其他", "grid", "#8E8E93").is_err(),
+            "改成同类型的已有分类名应拒绝"
+        );
+        assert!(
+            update_category(&conn, "food", "伙食", "utensils", "#FF9500").is_ok(),
+            "改成不重复的名字应允许"
+        );
     }
 }

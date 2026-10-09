@@ -1,6 +1,7 @@
 mod ai;
 mod db;
 mod keys;
+mod lock;
 mod models;
 mod service;
 
@@ -175,6 +176,31 @@ fn delete_category(state: DbState<'_>, id: String, fallback: Option<String>) -> 
 fn reorder_categories(state: DbState<'_>, ids: Vec<String>) -> Result<(), String> {
     let conn = state.lock().map_err(|e| e.to_string())?;
     service::reorder_categories(&conn, &ids)
+}
+
+/* ========== 应用锁 ========== */
+#[tauri::command]
+fn lock_status(state: DbState<'_>) -> Result<lock::LockStatus, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    lock::status(&conn)
+}
+
+#[tauri::command]
+fn lock_set_pin(state: DbState<'_>, pin: String) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    lock::set_pin(&conn, &pin)
+}
+
+#[tauri::command]
+fn lock_verify(state: DbState<'_>, pin: String) -> Result<bool, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    lock::verify(&conn, &pin)
+}
+
+#[tauri::command]
+fn lock_disable(state: DbState<'_>) -> Result<(), String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    lock::disable(&conn)
 }
 
 /* ========== 设置（settings 键值表） ========== */
@@ -512,6 +538,10 @@ pub fn run() {
             category_usage,
             delete_category,
             reorder_categories,
+            lock_status,
+            lock_set_pin,
+            lock_verify,
+            lock_disable,
             get_setting,
             set_setting,
             delete_setting,

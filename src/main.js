@@ -90,8 +90,6 @@ function todayExpense() {
     .reduce((s, t) => s + t.amount, 0);
 }
 
-function persist() {}
-
 /* ================= 工具 ================= */
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
@@ -822,6 +820,82 @@ $('#catManageSheet').addEventListener('click', async e => {
 });
 
 /* 分类编辑面板交互 */
+/* ===== 自动分类规则 ===== */
+function renderCatRuleCat() {
+  // 下拉框列全部支出分类（含兜底 other），并保留当前选项
+  const sel = $('#catRuleCat');
+  const cur = sel.value;
+  const cats = [...(CATEGORIES.expense || [])];
+  if (!cats.some(c => c.id === 'other')) {
+    // 确保兜底分类可被选择
+    cats.unshift({ id: 'other', name: '其他' });
+  }
+  sel.innerHTML = cats.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  if (cur && cats.some(c => c.id === cur)) sel.value = cur;
+}
+
+function catRuleCatName(id) {
+  const c = CAT_MAP[id];
+  return c ? c.name : '其他';
+}
+
+function renderCatRules() {
+  const list = $('#catRuleList');
+  $('#catRuleSub').textContent = CAT_RULES.length
+    ? `共 ${CAT_RULES.length} 条自定义规则`
+    : '自定义关键词匹配规则';
+  if (!CAT_RULES.length) {
+    list.innerHTML = '<div class="cat-rule-empty">暂无规则，添加后导入账单将自动归类。</div>';
+    return;
+  }
+  list.innerHTML = CAT_RULES.map((r, i) => {
+    const cn = r.cat === 'other' ? '其他' : catRuleCatName(r.cat);
+    return `<div class="cat-rule-item">
+      <span class="cat-rule-kw">「${escapeHtml(r.kw)}」命中 → ${escapeHtml(cn)}</span>
+      <button class="cat-rule-del" data-idx="${i}" aria-label="删除规则">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function openCatRules() {
+  renderCatRuleCat();
+  renderCatRules();
+  openModal($('#catRuleSheet'));
+}
+
+async function addCatRule() {
+  const kw = ($('#catRuleKw').value || '').trim();
+  const cat = $('#catRuleCat').value;
+  if (!kw) { toast('请输入关键词'); return; }
+  if (CAT_RULES.some(r => r.kw === kw)) { toast('该关键词已存在'); return; }
+  CAT_RULES.push({ kw, cat });
+  await saveCatRules(CAT_RULES);
+  $('#catRuleKw').value = '';
+  renderCatRules();
+  toast('规则已添加');
+}
+
+async function removeCatRule(idx) {
+  if (idx < 0 || idx >= CAT_RULES.length) return;
+  CAT_RULES.splice(idx, 1);
+  await saveCatRules(CAT_RULES);
+  renderCatRules();
+  toast('规则已删除');
+}
+
+if ($('#catRuleBtn')) {
+  $('#catRuleBtn').addEventListener('click', openCatRules);
+}
+$('#catRuleAdd').addEventListener('click', addCatRule);
+$('#catRuleList').addEventListener('click', e => {
+  const del = e.target.closest('.cat-rule-del');
+  if (del) removeCatRule(Number(del.dataset.idx));
+});
+$('#catRuleKw').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addCatRule();
+});
+
+/* 分类编辑面板交互 */
 $('#catEditName').addEventListener('input', () => {
   $('#catEditNamePlain').textContent = $('#catEditName').value.trim() || '分类名';
 });
@@ -1280,10 +1354,16 @@ const catEditSheet     = $('#catEditSheet');
 const aiKeySheet       = $('#aiKeySheet');
 const aiProviderSheet  = $('#aiProviderSheet');
 const periodSheet      = $('#periodSheet');
+const lockManageSheet  = $('#lockManageSheet');
+const lockConfirmSheet = $('#lockConfirmSheet');
+const lockEnableSheet  = $('#lockEnableSheet');
+const catRuleSheet     = $('#catRuleSheet');
+const exportFormatSheet= $('#exportFormatSheet');
+const importFormatSheet= $('#importFormatSheet');
 const allPanels = [actionSheet, editTypeSheet, editAmountSheet, editDateSheet,
                    monthPickerSheet, weekPickerSheet, dayPickerSheet, batchCatSheet, budgetSheet,
                    tplSheet, calSheet, catManageSheet, catEditSheet, aiKeySheet, aiProviderSheet,
-                   periodSheet];
+                   periodSheet, lockManageSheet, lockConfirmSheet, lockEnableSheet, catRuleSheet, exportFormatSheet, importFormatSheet];
 
 let activePanel = null;
 let modalOpenedAt = 0;   // 弹层打开时刻，用于忽略紧随其后的「幽灵 click」
@@ -1307,7 +1387,7 @@ function openModal(panel) {
 
 /* 新增的三个面板（API Key / 服务商 / 结余范围）的「取消」按钮：
    它们不像老面板那样各自绑过 data-act="cancel"，这里统一补上，否则点了没反应 */
-[aiKeySheet, aiProviderSheet, periodSheet].forEach(p => {
+[aiKeySheet, aiProviderSheet, periodSheet, catRuleSheet, exportFormatSheet, importFormatSheet].forEach(p => {
   if (!p) return;
   p.addEventListener('click', e => {
     if (e.target.closest('[data-act="cancel"]')) closeModal();
@@ -1906,7 +1986,7 @@ function switchTab(name) {
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
   // 财报页内含「图表 / AI 分析」两个视图，进入时按当前视图渲染
   if (name === 'stats') setTimeout(() => setStatsView(statsView), 60);
-  if (name === 'settings') { updateRecordCount(); renderBudgetSettingRow(); renderAiSettingsRows(); }
+  if (name === 'settings') { updateRecordCount(); renderBudgetSettingRow(); renderAiSettingsRows(); renderLockSettingRow(); }
 }
 
 $$('.tab').forEach(t => {
@@ -2210,6 +2290,83 @@ async function exportBackup() {
   }
 }
 
+/* ================= 导出流水到 Excel / CSV ================= */
+function txCatName(t) {
+  const c = CAT_MAP[t.category];
+  return c ? c.name : '其他';
+}
+
+function txTypeLabel(t) {
+  return t.type === 'expense' ? '支出' : '收入';
+}
+
+function buildExportRows(scope) {
+  // scope: 'all' 导出全部；'month' 只导当前查看月份
+  const list = scope === 'month'
+    ? txs.filter(t => t.date.startsWith(viewMonth))
+    : txs;
+  return list
+    .slice()
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map(t => {
+      const amount = Number(t.amount) || 0;
+      return {
+        日期: t.date,
+        类型: txTypeLabel(t),
+        分类: txCatName(t),
+        金额: t.type === 'expense' ? -amount : amount,
+        备注: t.note || '',
+      };
+    });
+}
+
+function exportRowsToCsv(rows, path) {
+  // 手动转 CSV（处理逗号/引号/换行）
+  const esc = v => {
+    const s = String(v ?? '');
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const header = ['日期', '类型', '分类', '金额', '备注'];
+  const lines = [header.join(',')];
+  rows.forEach(r => lines.push(header.map(h => esc(r[h])).join(',')));
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  // 带 BOM，Excel 中文不乱码
+  const buf = new Uint8Array([0xEF, 0xBB, 0xBF, ...blob]);
+  return window.__TAURI__.fs.writeBinaryFile(path, buf);
+}
+
+async function exportRowsToXlsx(rows, path) {
+  // 复用 SheetJS（与导入同一份本地静态库，不联网）
+  await loadXLSX();
+  if (!window.XLSX) throw new Error('Excel 解析库不可用');
+  const header = ['日期', '类型', '分类', '金额', '备注'];
+  const sheet = window.XLSX.utils.aoa_to_sheet([
+    header, ...rows.map(r => header.map(h => r[h])),
+  ]);
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, sheet, '流水');
+  const out = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  await window.__TAURI__.fs.writeBinaryFile(path, out);
+}
+
+async function exportTable(fmt) {
+  try {
+    const rows = buildExportRows('all');
+    if (!rows.length) { toast('暂无记录可导出'); return; }
+    const path = await window.__TAURI__.dialog.save({
+      defaultPath: `ledger-${todayStr()}.${fmt === 'xlsx' ? 'xlsx' : 'csv'}`,
+      filters: [{ name: fmt === 'xlsx' ? 'Excel 表格' : 'CSV 文本', extensions: [fmt] }],
+    });
+    if (!path) return;   // 用户取消
+    if (fmt === 'xlsx') await exportRowsToXlsx(rows, path);
+    else await exportRowsToCsv(rows, path);
+    toast('已导出 ' + rows.length + ' 条记录');
+  } catch (e) {
+    console.error('导出表格失败', e);
+    toast('导出失败：' + e);
+  }
+}
+
 async function importBackup() {
   try {
     const selected = await window.__TAURI__.dialog.open({
@@ -2285,11 +2442,6 @@ function confirmDialog(msg) {
   });
 }
 
-const _exportBtn = $('#exportBtn');
-if (_exportBtn) _exportBtn.addEventListener('click', exportBackup);
-const _importBtn = $('#importBtn');
-if (_importBtn) _importBtn.addEventListener('click', importBackup);
-
 async function clearAll() {
   const ok = await confirmDialog('确认清空所有记录？此操作无法撤销。');
   if (!ok) return;
@@ -2308,7 +2460,36 @@ async function clearAll() {
 const _clearAllBtn = $('#clearAllBtn');
 if (_clearAllBtn) _clearAllBtn.addEventListener('click', clearAll);
 
-/* ================= 导入微信/支付宝账单 ================= */
+/* ================= 导入 / 导出数据 ================= */
+/* 「导出数据」：选择 Excel / CSV / SQLite */
+const _exportDataBtn = $('#exportDataBtn');
+if (_exportDataBtn) {
+  _exportDataBtn.addEventListener('click', () => openModal(exportFormatSheet));
+}
+exportFormatSheet.addEventListener('click', e => {
+  const btn = e.target.closest('[data-exportfmt]');
+  if (!btn) return;
+  closeModal();            // 先收起格式弹层
+  const fmt = btn.dataset.exportfmt;
+  if (fmt === 'sqlite') exportBackup();
+  else exportTable(fmt);
+});
+
+/* 「导入数据」：选择 Excel / CSV（账单）/ SQLite（恢复） */
+const _importDataBtn = $('#importDataBtn');
+if (_importDataBtn) {
+  _importDataBtn.addEventListener('click', () => openModal(importFormatSheet));
+}
+importFormatSheet.addEventListener('click', e => {
+  const btn = e.target.closest('[data-importfmt]');
+  if (!btn) return;
+  closeModal();            // 先收起格式弹层
+  const fmt = btn.dataset.importfmt;
+  if (fmt === 'sqlite') importBackup();
+  else importBill();
+});
+
+/* ================= 导入微信/支付宝账单（内部） ================= */
 
 const CATEGORY_KEYWORDS = {
   food: [
@@ -2348,9 +2529,46 @@ const CATEGORY_KEYWORDS = {
   ]
 };
 
+/* ---- 用户自定义分类规则 ---- */
+/* 规则存于 settings 表 key='cat_rules'，value 为 JSON 数组：
+   [{ kw: "沙县", cat: "food" }, { kw: "房东", cat: "home" }]
+   默认按关键包含匹配；规则顺序即优先级，用户规则优先于内置关键词。 */
+const CAT_RULES_KEY = 'cat_rules';
+let CAT_RULES = [];
+
+async function loadCatRules() {
+  try {
+    const raw = await invoke('get_setting', { key: CAT_RULES_KEY });
+    let arr = [];
+    if (raw) { try { arr = JSON.parse(raw); } catch (e) { arr = []; } }
+    CAT_RULES = Array.isArray(arr) ? arr.filter(r => r && r.kw && r.cat) : [];
+  } catch (e) { CAT_RULES = []; }
+}
+
+async function saveCatRules(list) {
+  CAT_RULES = (list || []).filter(r => r && r.kw && r.cat);
+  await invoke('set_setting', {
+    key: CAT_RULES_KEY,
+    value: JSON.stringify(CAT_RULES)
+  });
+}
+
+function applyUserRules(text, t) {
+  if (!t) return null;
+  for (const r of CAT_RULES) {
+    const kw = (r.kw || '').toLowerCase();
+    if (kw && t.includes(kw)) return r.cat;
+  }
+  return null;
+}
+
+/* 调用点：账单导入（备注+商户+商品名） */
 function autoCategorize(text) {
-  const t = (text || '').toLowerCase();
+  const src = (text || '');
+  const t = src.toLowerCase();
   if (!t) return 'other';
+  const userCat = applyUserRules(src, t);
+  if (userCat) return userCat;
   for (const [catId, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const kw of keywords) {
       if (t.includes(kw.toLowerCase())) return catId;
@@ -2644,9 +2862,6 @@ async function importBill() {
     toast('导入失败：' + (e && e.message ? e.message : e));
   }
 }
-
-const _importBillBtn = $('#importBillBtn');
-if (_importBillBtn) _importBillBtn.addEventListener('click', importBill);
 
 /* ================= 设置页信息 ================= */
 function updateRecordCount() {
@@ -3406,10 +3621,195 @@ function toggleTheme() {
 const _themeToggle = $('#themeToggle');
 if (_themeToggle) _themeToggle.addEventListener('click', toggleTheme);
 
+/* ================= 应用锁 ================= */
+const lockOverlay = $('#lockOverlay');
+let lockEnabled = false;      // 后端是否启用锁定
+let lockMode = 'verify';      // verify | setPin | setPinConfirm
+let lockPinBuf = '';
+let lockConfirmBuf = '';
+let lockSetupTitle = '设置密码';
+
+const LOCK_MAX = 8;
+const LOCK_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'confirm'];
+function renderLockKeys() {
+  $('#lockKeys').innerHTML = LOCK_KEYS.map(k => {
+    if (k === 'del') return `<button class="lock-key key-mute" data-lk="del" aria-label="退格">⌫</button>`;
+    if (k === 'confirm') return `<button class="lock-key key-mute" data-lk="confirm" aria-label="确认">✓</button>`;
+    return `<button class="lock-key" data-lk="${k}">${k}</button>`;
+  }).join('');
+}
+renderLockKeys();
+
+function renderLockDots() {
+  // 一整条输入框：框内仅显示已输入的位数圆点，空态显示闪烁光标
+  const len = Math.min(lockPinBuf.length, LOCK_MAX);
+  $('#lockDots').innerHTML = Array.from({ length: len }, () =>
+    '<span class="lock-dot"></span>').join('');
+  $('#lockDots').classList.toggle('empty', len === 0);
+}
+
+function showLockOverlay(mode, setupTitle) {
+  lockMode = mode;
+  lockPinBuf = '';
+  lockConfirmBuf = '';
+  lockSetupTitle = setupTitle || '设置密码';
+  $('#lockError').textContent = '';
+  $('#lockCancel').hidden = (mode !== 'setPinConfirm');
+  $('#lockTitle').textContent = (mode === 'verify') ? '记账本' : lockSetupTitle;
+  $('#lockSub').textContent =
+    mode === 'verify' ? '输入密码解锁'
+    : mode === 'setPin' ? lockSetupTitle + '（4-8 位数字）'
+    : '再次输入以确认';
+  renderLockDots();
+  lockOverlay.hidden = false;
+  lockOverlay.classList.remove('lock-shake');
+}
+
+function hideLockOverlay() {
+  lockOverlay.hidden = true;
+  lockMode = 'verify';
+}
+
+function shakeLockError(msg) {
+  $('#lockError').textContent = msg;
+  lockOverlay.classList.remove('lock-shake');
+  void lockOverlay.offsetWidth;
+  lockOverlay.classList.add('lock-shake');
+}
+
+async function submitLockPin() {
+  if (lockPinBuf.length < 4) { shakeLockError('密码至少 4 位数字'); return; }
+  if (lockMode === 'verify') {
+    const ok = await invoke('lock_verify', { pin: lockPinBuf }).catch(() => false);
+    if (ok) {
+      hideLockOverlay();
+      renderLockSettingRow();
+    } else {
+      lockPinBuf = ''; renderLockDots();
+      shakeLockError('密码错误，请重试');
+    }
+    return;
+  }
+  if (lockMode === 'setPin') {
+    lockConfirmBuf = lockPinBuf; lockPinBuf = '';
+    lockMode = 'setPinConfirm';
+    $('#lockCancel').hidden = false;
+    $('#lockSub').textContent = '再次输入以确认';
+    renderLockDots();
+    return;
+  }
+  // setPinConfirm：两次一致才写入
+  if (lockPinBuf !== lockConfirmBuf) {
+    lockPinBuf = ''; lockConfirmBuf = ''; lockMode = 'setPin';
+    $('#lockCancel').hidden = true;
+    $('#lockSub').textContent = lockSetupTitle + '（4-8 位数字）';
+    renderLockDots();
+    shakeLockError('两次输入不一致，请重试');
+    return;
+  }
+  try {
+    await invoke('lock_set_pin', { pin: lockPinBuf });
+    hideLockOverlay();
+    toast('应用锁已开启');
+    renderLockSettingRow();
+  } catch (e) {
+    lockPinBuf = ''; lockConfirmBuf = ''; lockMode = 'setPin';
+    $('#lockCancel').hidden = true;
+    $('#lockSub').textContent = lockSetupTitle + '（4-8 位数字）';
+    renderLockDots();
+    shakeLockError('设置失败：' + e);
+  }
+}
+
+$('#lockKeys').addEventListener('click', e => {
+  const key = e.target.closest('[data-lk]'); if (!key) return;
+  const act = key.dataset.lk;
+  if (act === 'del') { lockPinBuf = lockPinBuf.slice(0, -1); renderLockDots(); return; }
+  if (act === 'confirm') { submitLockPin(); return; }
+  // 数字键满 8 位：给出明确提示，而非静默忽略（避免「按了没反应」）
+  if (lockPinBuf.length >= LOCK_MAX) {
+    shakeLockError('密码最多 8 位数字');
+    return;
+  }
+  lockPinBuf += act;
+  renderLockDots();
+  // 统一由用户按 ✓ 提交，任何模式下都不自动跳转/解锁，
+  // 让确认键始终可控，避免多输/漏输一位时误触进入。
+});
+
+$('#lockCancel').addEventListener('click', () => {
+  lockPinBuf = ''; lockConfirmBuf = ''; lockMode = 'setPin';
+  $('#lockCancel').hidden = true;
+  $('#lockSub').textContent = lockSetupTitle + '（4-8 位数字）';
+  renderLockDots();
+});
+
+async function renderLockSettingRow() {
+  try {
+    const st = await invoke('lock_status');
+    lockEnabled = st.enabled;
+    $('#lockSettingSub').textContent =
+      st.enabled ? '密码已开启 · 切后台自动锁定' : '设置密码，防止他人误看';
+  } catch (e) { /* 忽略 */ }
+}
+
+const _lockSettingBtn = $('#lockSettingBtn');
+if (_lockSettingBtn) _lockSettingBtn.addEventListener('click', () => {
+  if (lockEnabled) openModal(lockManageSheet);
+  else openModal(lockEnableSheet);   // 先确认是否开启，再进入设置 PIN
+});
+
+lockEnableSheet.addEventListener('click', e => {
+  const b = e.target.closest('[data-lkact]'); if (!b) return;
+  const act = b.dataset.lkact;
+  if (act === 'cancel') { closeModal(); return; }
+  if (act === 'confirmEnable') { closeModal(); showLockOverlay('setPin', '设置密码'); }
+});
+
+lockManageSheet.addEventListener('click', e => {
+  const b = e.target.closest('[data-lkact]'); if (!b) return;
+  const act = b.dataset.lkact;
+  closeModal();
+  if (act === 'cancel') return;
+  if (act === 'change') showLockOverlay('setPin', '修改密码');
+  else if (act === 'disable') openModal(lockConfirmSheet);
+});
+
+lockConfirmSheet.addEventListener('click', async e => {
+  const b = e.target.closest('[data-lkact]'); if (!b) return;
+  const act = b.dataset.lkact;
+  if (act === 'cancel') { closeModal(); return; }
+  if (act === 'confirmDisable') {
+    closeModal();
+    try {
+      await invoke('lock_disable');
+      lockEnabled = false;
+      toast('应用锁已关闭');
+      renderLockSettingRow();
+    } catch (err) { toast('关闭失败：' + err); }
+  }
+});
+
+/* 切后台 / 切窗口 / 最小化时重新锁定 */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && lockEnabled) showLockOverlay('verify');
+});
+
+/* 启动时若已启用，直接进入解锁 */
+async function initLock() {
+  try {
+    const st = await invoke('lock_status');
+    lockEnabled = st.enabled;
+    if (st.enabled) showLockOverlay('verify');
+  } catch (e) { /* 忽略 */ }
+}
+
 /* ================= 启动 ================= */
 async function boot() {
   applyTheme();
+  await initLock();
   await loadCategories();
+  await loadCatRules();   // 用户自定义分类规则（导入前就绪）
   try {
     await refreshTxs();
   } catch (e) {
@@ -3425,6 +3825,7 @@ async function boot() {
   updateRecordCount();
   renderBudgetSettingRow();
   renderAiSettingsRows();
+  renderLockSettingRow();
   switchTab('home');
 }
 boot();
