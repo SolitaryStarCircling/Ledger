@@ -24,6 +24,18 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
+    signingConfigs {
+        create("release") {
+            val props = Properties().apply {
+                rootProject.file("gradle.properties").inputStream().use { load(it) }
+            }
+            // 相对路径必须相对 gen/android 根目录解析，而不是 app 模块目录
+            storeFile = rootProject.file(props.getProperty("LEDGER_KEYSTORE"))
+            storePassword = props.getProperty("LEDGER_KEYSTORE_PASSWORD")
+            keyAlias = props.getProperty("LEDGER_KEY_ALIAS")
+            keyPassword = props.getProperty("LEDGER_KEY_PASSWORD")
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -38,7 +50,7 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
