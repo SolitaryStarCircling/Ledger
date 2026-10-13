@@ -22,9 +22,11 @@ serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = "0.4"
 # AI 消费分析：DeepSeek HTTP 客户端
-# TLS 用 rustls + ring（纯 Rust，Windows / Android 均不需要 cmake / nasm / openssl）
+# TLS 用 rustls + ring + webpki-roots（纯 Rust，Windows / Android 均不需要 cmake / nasm / openssl）
+# Android 上 rustls-platform-verifier 需要手动 JNI 初始化，改用内置根证书兼容
 reqwest = { version = "0.13", default-features = false, features = ["json", "charset", "http2", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
 
 # 应用锁：PIN 用 Argon2id 哈希存本地，纯 Rust，无外部依赖链
 argon2 = "0.5"

@@ -197,10 +197,30 @@ fn network_error(e: &reqwest::Error, timeout_secs: u64) -> CallError {
     CallError { msg, capability: false }
 }
 
+/// 构建 TLS 配置：使用 webpki-roots 内置 Mozilla 根证书。
+/// reqwest 默认走 rustls-platform-verifier，而它在 Android 上需要手动 JNI 初始化，
+/// 否则握手时 panic 导致请求发不出去；改用内置根证书后桌面/安卓行为一致。
+fn build_tls_config() -> Result<rustls::ClientConfig, String> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+
+    let mut config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
+        .map_err(|e| format!("构建 TLS 配置失败：{}", e))?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    Ok(config)
+}
+
 fn new_client(base: &str) -> Result<reqwest::Client, String> {
+    let tls_config = build_tls_config()?;
     reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout_for(base)))
         .connect_timeout(Duration::from_secs(10))
+        .use_preconfigured_tls(tls_config)
         .build()
         .map_err(|e| format!("初始化网络客户端失败：{}", e))
 }
