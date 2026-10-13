@@ -13,8 +13,7 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+.vscode/
 .idea
 .DS_Store
 *.suo
@@ -34,6 +33,11 @@ src-tauri/gen/android/.gradle
 *.aab
 *.msi
 *.exe
+
+# 签名文件与签名凭据（内含密码，绝不入库）
+src-tauri/gen/android/*.keystore
+src-tauri/gen/android/*.jks
+src-tauri/gen/android/gradle.properties
 
 # 本地数据库（真实账本数据，绝不入库）
 *.sqlite
