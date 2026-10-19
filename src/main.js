@@ -1108,9 +1108,9 @@ async function quickRecord(id) {
       date: todayStr(),
     });
     await refreshTxs();
-    await loadBudget();
     const ym = todayStr().slice(0, 7);
     if (ym !== viewMonth && !searchQuery) viewMonth = ym;
+    await loadBudget();   // 切月后必须重载预算，否则沿用上一月的额度
     renderHome();
     renderStats();
     updateRecordCount();
@@ -1544,7 +1544,7 @@ $('#editDateSave').addEventListener('click', async () => {
     await invoke('update_date', { id: String(targetTxId), date: editDateStr });
     await refreshTxs();
     const newYM = editDateStr.slice(0, 7);
-    if (newYM !== viewMonth) viewMonth = newYM;
+    if (newYM !== viewMonth) { viewMonth = newYM; await loadBudget(); }
     renderHome();
     renderStats();
     toast('时间已修改');
@@ -1604,8 +1604,9 @@ modalMask.addEventListener('click', () => {
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (activePanel) closeModal();
+  if (activePanel) closeModal();          // 有弹层（日历/月份选择等）时只关弹层
   else if (selectMode) exitSelect();
+  else if (sheet.classList.contains('show')) closeSheet();
 });
 
 /* ================= 月份选择器 ================= */
@@ -1720,15 +1721,70 @@ $('#dayPickerList').addEventListener('click', e => {
   if (cb) cb(ds);
 });
 
-/* ================= 明细页月份标签点击 ================= */
+/* ================= 明细页月份切换（标签点击 + 左右滑动） ================= */
+function shiftMonth(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+}
+
+/** 与月份选择器一致的可选范围：近 12 个月 ~ 未来 3 个月 */
+function monthShiftAllowed(ym) {
+  const t = new Date();
+  const min = new Date(t.getFullYear(), t.getMonth() - 12, 1);
+  const max = new Date(t.getFullYear(), t.getMonth() + 3, 1);
+  const cur = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1, 1);
+  return cur >= min && cur <= max;
+}
+
+async function switchViewMonth(ym) {
+  if (!ym || ym === viewMonth || !monthShiftAllowed(ym)) return false;
+  viewMonth = ym;
+  await loadBudget();   // 必须重载预算，否则会沿用上一月的额度
+  if (selectMode) exitSelect(); else renderHome();
+  renderBudgetSettingRow();
+  return true;
+}
+
 $('#summaryLabel').addEventListener('click', () => {
-  openMonthPicker(viewMonth, async (ym) => {
-    viewMonth = ym;
-    await loadBudget();
-    if (selectMode) exitSelect(); else renderHome();
-    renderBudgetSettingRow();
-  });
+  openMonthPicker(viewMonth, ym => { switchViewMonth(ym); });
 });
+
+// 明细页左右滑动切月：避开流水行（行自带左滑删除）、按钮、搜索栏、预算条等
+(function bindMonthSwipe() {
+  const el = $('#page-home');
+  if (!el) return;
+  let sx = 0, sy = 0, axis = null, pid = null;
+  const inBlocked = t => !(t instanceof Element) ||
+    !!t.closest('.tx-row, .quick-chip, button, input, #searchBar, #gestureHint, #budgetStrip');
+  el.addEventListener('pointerdown', e => {
+    if (pid !== null) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (searchQuery.trim() || selectMode) return;
+    if (inBlocked(e.target)) return;
+    pid = e.pointerId; axis = null;
+    sx = e.clientX; sy = e.clientY;
+  });
+  el.addEventListener('pointermove', e => {
+    if (pid === null || e.pointerId !== pid) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!axis) {
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+      axis = Math.abs(dx) > Math.abs(dy) * 1.4 ? 'x' : 'y';
+      if (axis === 'y') pid = null;   // 纵向手势交给页面滚动
+    }
+  });
+  window.addEventListener('pointerup', e => {
+    if (pid === null || e.pointerId !== pid) return;
+    const wasX = axis === 'x';
+    pid = null; axis = null;
+    if (!wasX) return;
+    const dx = e.clientX - sx;
+    if (Math.abs(dx) < 55) return;   // 位移太小视为误触
+    switchViewMonth(shiftMonth(viewMonth, dx < 0 ? 1 : -1));
+  });
+  window.addEventListener('pointercancel', () => { pid = null; axis = null; });
+})();
 
 /* ================= 搜索交互 ================= */
 $('#searchToggle').addEventListener('click', () => {
@@ -1763,6 +1819,9 @@ $('#searchClear').addEventListener('click', () => {
 /* ================= 统计页 ================= */
 let curPeriod = 'month';
 let statsDate = new Date();
+let chartType = 'expense';   // 图表页当前查看的类别：expense / income
+const TREND_MONTHS = 6;      // 「近 N 个月趋势」的月数
+const ymOf = d => d.getFullYear() + '-' + pad2(d.getMonth() + 1);
 
 function periodLabel(period, ref) {
   const today = new Date();
@@ -1831,18 +1890,23 @@ function renderStats() {
   $('#statsIncome').textContent  = fmtMoney(income);
   $('#statsExpense').textContent = fmtMoney(expense);
 
-  animateNumber($('#donutValue'), Number($('#donutValue').dataset.val || 0), expense, 620, fmtMoney);
-  $('#donutValue').dataset.val = expense;
+  const isExpenseChart = chartType === 'expense';
+  const total = isExpenseChart ? expense : income;
+  $('#donutLabel').textContent = isExpenseChart ? '支出' : '收入';
+  $('#chartCaption').textContent = isExpenseChart ? '支出表' : '收入表';
+  animateNumber($('#donutValue'), Number($('#donutValue').dataset.val || 0), total, 620, fmtMoney);
+  $('#donutValue').dataset.val = total;
 
-  // 按分类聚合金额与笔数：笔数用于支出表行的「N 笔」入口，明细页复用同一口径
+  renderTrendChart();
+
+  // 按分类聚合金额与笔数：笔数用于分类行的「N 笔」入口
   const byCat = {};
-  periodTx.filter(t => t.type === 'expense').forEach(t => {
+  periodTx.filter(t => t.type === chartType).forEach(t => {
     const e = byCat[t.category] || (byCat[t.category] = { amt: 0, count: 0 });
     e.amt += t.amount;
     e.count += 1;
   });
   const entries = Object.entries(byCat).sort((a, b) => b[1].amt - a[1].amt);
-  const total = expense;
 
   const R = 52, C = 2 * Math.PI * R;
   const donut = $('#donut');
@@ -1852,7 +1916,7 @@ function renderStats() {
     $('#catList').innerHTML = emptyState({
       variant: 'compact',
       icon: IC('<circle cx="12" cy="12" r="8.2"/><path d="M12 12l3-3"/>'),
-      title: '该周期还没有支出',
+      title: '该周期还没有' + (isExpenseChart ? '支出' : '收入'),
     });
     refreshCatDetailIfOpen(); // 数据变更可能让明细页变空，开着时同步重绘
     return;
@@ -1877,8 +1941,8 @@ function renderStats() {
   entries.forEach(([id, e], i) => {
     const cat = CAT_MAP[id] || { name: '其他', color: '#8E8E93' };
     const pct = (e.amt / total) * 100;
-    // 支出表行可点进分类明细页：data-cat 供 #catList 事件委托取用
-    html += `<div class="cat-row" data-cat="${escapeHtml(id)}" role="button" tabindex="0" style="animation-delay:${i * 45}ms">
+    // 支出、收入表行都可点进分类明细页；data-type 决定明细页统计口径
+    html += `<div class="cat-row" data-cat="${escapeHtml(id)}" data-type="${chartType}" role="button" tabindex="0" style="animation-delay:${i * 45}ms">
       <div class="cat-dot" style="background:${cat.color}"></div>
       <div class="cat-mid">
         <div class="cat-line"><span>${escapeHtml(cat.name)}</span><span class="pct">${pct.toFixed(1)}%</span></div>
@@ -1902,6 +1966,48 @@ function renderStats() {
   });
   refreshCatDetailIfOpen(); // 明细页开着时随数据变更同步重绘
 }
+
+/* 「近 6 个月趋势」：以财报页当前范围为锚点，展示前 5 个月 + 当前月 */
+function renderTrendChart() {
+  const el = $('#trendChart');
+  if (!el) return;
+  const ref = statsDate;
+  const cols = [];
+  for (let i = TREND_MONTHS - 1; i >= 0; i--) {
+    const d = new Date(ref.getFullYear(), ref.getMonth() - i, 1);
+    const ym = ymOf(d);
+    let exp = 0, inc = 0;
+    txs.forEach(t => {
+      if (!t.date.startsWith(ym)) return;
+      if (t.type === 'expense') exp += t.amount; else inc += t.amount;
+    });
+    cols.push({ ym, label: (d.getMonth() + 1) + '月', exp, inc });
+  }
+  const max = Math.max(1, ...cols.map(c => Math.max(c.exp, c.inc)));
+  const h = v => v > 0 ? Math.max(4, Math.round((v / max) * 100)) : 0;   // 百分比高度
+  const curYM = ymOf(ref);
+  el.innerHTML = cols.map(c => `
+    <div class="trend-col${c.ym === curYM ? ' is-cur' : ''}">
+      <div class="trend-bars">
+        <i class="bar exp" style="height:${h(c.exp)}%" title="支出 ${fmtMoney(c.exp)}"></i>
+        <i class="bar inc" style="height:${h(c.inc)}%" title="收入 ${fmtMoney(c.inc)}"></i>
+      </div>
+      <div class="trend-label">${c.label}</div>
+    </div>`).join('');
+}
+
+/* 图表页：支出 / 收入 切换 */
+const _chartTypeSeg = $('#chartTypeSeg');
+if (_chartTypeSeg) _chartTypeSeg.addEventListener('click', e => {
+  const b = e.target.closest('.seg');
+  if (!b) return;
+  const next = b.dataset.type === 'income' ? 'income' : 'expense';
+  if (next === chartType) return;
+  chartType = next;
+  _chartTypeSeg.dataset.type = chartType;
+  $$('#chartTypeSeg .seg').forEach(btn => btn.classList.toggle('active', btn.dataset.type === chartType));
+  renderStats();
+});
 
 /* 「结余范围」面板：取代原来顶部那排 年/月/周/天 分段控件。
    原来「切换具体月份/周/日期」藏在「点击已选中的分段按钮」上，几乎没人能发现；
@@ -2015,15 +2121,17 @@ $$('.tab').forEach(t => {
 });
 
 /* ================= 分类支出明细页（财报支出表点入） ================= */
-let curCatId = null; // 明细页当前分类；注意与记账面板的 curCat（选中分类）无关
+let curCatId = null;   // 明细页当前分类；注意与记账面板的 curCat（选中分类）无关
+let curCatType = 'expense';   // 明细页当前类别：支出 / 收入
 
 /** 明细页统计列用纯数字千分位两位小数（不带 ¥），口径与演示稿一致 */
 const fmtNum = n => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function openCatDetail(catId) {
+function openCatDetail(catId, type) {
   if (selectMode) exitSelect(); // 明细页与首页多选互斥，避免误操作
   curCatId = catId;
-  renderCatDetail(catId);
+  curCatType = type === 'income' ? 'income' : 'expense';
+  renderCatDetail(catId, curCatType);
   // 不走 switchTab：财报 tab 保持高亮，返回/切 tab 由各自监听处理
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-catdetail'));
   const page = $('#page-catdetail');
@@ -2038,19 +2146,21 @@ function closeCatDetail() {
 /** 数据变更后若明细页开着则重绘；由 renderHome / renderStats 末尾调用兜住全部刷新路径 */
 function refreshCatDetailIfOpen() {
   const page = $('#page-catdetail');
-  if (page && page.classList.contains('active') && curCatId) renderCatDetail(curCatId);
+  if (page && page.classList.contains('active') && curCatId) renderCatDetail(curCatId, curCatType);
 }
 
-function renderCatDetail(catId) {
+function renderCatDetail(catId, type) {
   const range = getPeriodRange(curPeriod);
+  const isExpense = type !== 'income';
   const cat = CAT_MAP[catId] || DEFAULT_CAT || { name: '其他', color: '#8E8E93', icon: '' };
 
   $('#catDetailDot').style.background = cat.color;
   $('#catDetailTitle').textContent = cat.name;
   $('#catDetailPeriod').textContent = range.label;
+  $('#cdTotalLabel').textContent = isExpense ? '总支出(元)' : '总收入(元)';
 
   const items = txs
-    .filter(t => t.type === 'expense' && t.category === catId && t.date >= range.start && t.date <= range.end)
+    .filter(t => t.type === (isExpense ? 'expense' : 'income') && t.category === catId && t.date >= range.start && t.date <= range.end)
     .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
 
   const total = items.reduce((s, t) => s + t.amount, 0);
@@ -2063,7 +2173,7 @@ function renderCatDetail(catId) {
     listEl.innerHTML = emptyState({
       variant: 'compact',
       icon: IC('<circle cx="12" cy="12" r="8.2"/><path d="M12 12l3-3"/>'),
-      title: '该周期还没有支出',
+      title: '该周期还没有' + (isExpense ? '支出' : '收入'),
     });
     return;
   }
@@ -2076,9 +2186,9 @@ function renderCatDetail(catId) {
   let html = '';
   dates.forEach((ds, idx) => {
     const gItems = groups[ds];
-    const dayExpense = gItems.reduce((s, t) => s + t.amount, 0);
+    const daySum = gItems.reduce((s, t) => s + t.amount, 0);
     html += `<div class="day-group" style="animation-delay:${Math.min(idx * 45, 260)}ms">
-      <div class="day-header"><span>${dayLabel(ds)}</span><span class="sum">支出 ${fmtMoney(dayExpense)}</span></div>
+      <div class="day-header"><span>${dayLabel(ds)}</span><span class="sum">${isExpense ? '支出' : '收入'} ${fmtMoney(daySum)}</span></div>
       <div class="card">`;
     gItems.forEach(t => {
       // 真实数据无 time/merchant 字段，时间从 createdAt 毫秒时间戳推导
@@ -2092,7 +2202,7 @@ function renderCatDetail(catId) {
             <div class="tx-name">${escapeHtml(t.note || cat.name)}</div>
             <div class="tx-note">${clock}</div>
           </div>
-          <div class="tx-amount">-${fmtMoney(t.amount)}</div>
+          <div class="tx-amount${isExpense ? '' : ' income'}">${isExpense ? '-' : '+'}${fmtMoney(t.amount)}</div>
         </div>
       </div>`;
     });
@@ -2103,12 +2213,12 @@ function renderCatDetail(catId) {
   listEl.querySelectorAll('.tx-row').forEach(row => bindSwipe(row));
 }
 
-// 支出表行点击/回车 → 明细页。事件委托：catList 每次 renderStats 都会整体重绘
+// 分类行点击/回车 → 分类明细页。事件委托：catList 每次 renderStats 都会整体重绘
 const _catList = $('#catList');
 if (_catList) {
   const openFromRow = target => {
     const row = target.closest('.cat-row');
-    if (row && row.dataset.cat) openCatDetail(row.dataset.cat);
+    if (row && row.dataset.cat) openCatDetail(row.dataset.cat, row.dataset.type);
   };
   _catList.addEventListener('click', e => openFromRow(e.target));
   _catList.addEventListener('keydown', e => {
@@ -2354,7 +2464,7 @@ async function saveTx() {
       await refreshTxs();
       closeSheet();
       const savedYM = curDate.slice(0, 7);
-      if (savedYM !== viewMonth && !searchQuery) viewMonth = savedYM;
+      if (savedYM !== viewMonth && !searchQuery) { viewMonth = savedYM; await loadBudget(); }
       renderHome();
       if ($('#page-stats').classList.contains('active')) renderStats();
       updateRecordCount();
@@ -2380,11 +2490,8 @@ sheetMask.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && sheet.classList.contains('show')) closeSheet();
-});
-
-document.addEventListener('keydown', e => {
   if (!sheet.classList.contains('show')) return;
+  if (activePanel) return;   // 弹层（如日历）打开时不把按键透传到记账面板
   if (document.activeElement === $('#noteInput')) return;
   if (/^[0-9.]$/.test(e.key)) { pressKey(e.key); e.preventDefault(); }
   else if (e.key === 'Backspace') { pressKey('del'); e.preventDefault(); }
@@ -2450,10 +2557,10 @@ function exportRowsToCsv(rows, path) {
   const header = ['日期', '类型', '分类', '金额', '备注'];
   const lines = [header.join(',')];
   rows.forEach(r => lines.push(header.map(h => esc(r[h])).join(',')));
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-  // 带 BOM，Excel 中文不乱码
-  const buf = new Uint8Array([0xEF, 0xBB, 0xBF, ...blob]);
-  return window.__TAURI__.fs.writeBinaryFile(path, buf);
+  // 直接 UTF-8 编码并在开头拼上 BOM 字符，Excel 打开中文不乱码
+  // （不能用 new Uint8Array([...blob])：Blob 不可迭代，会报 blob is not iterable）
+  const buf = new TextEncoder().encode('\uFEFF' + lines.join('\n'));
+  return window.__TAURI__.fs.writeFile(path, buf);
 }
 
 async function exportRowsToXlsx(rows, path) {
@@ -2467,7 +2574,7 @@ async function exportRowsToXlsx(rows, path) {
   const wb = window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(wb, sheet, '流水');
   const out = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  await window.__TAURI__.fs.writeBinaryFile(path, out);
+  await window.__TAURI__.fs.writeFile(path, new Uint8Array(out));
 }
 
 async function exportTable(fmt) {
@@ -2497,7 +2604,7 @@ async function importBackup() {
     if (!selected) return;
 
     const ok = await confirmDialog(
-      '导入会覆盖当前所有数据，且无法撤销。\n建议先导出备份。\n\n确认继续吗？'
+      '导入会覆盖当前的流水、预算、常用项和分类，且无法撤销。\n注意：设置项（密码、API Key、隐私授权、自动分类规则）不会被导入，需在本机重新配置。\n建议先导出备份。\n\n确认继续吗？'
     );
     if (!ok) return;
 
@@ -2760,12 +2867,20 @@ function parseBillRows(rows) {
 
   let headerRowIdx = -1;
   let headerRow = null;
+  let ownFormat = false;   // 本应用自己导出的表格：日期/类型/分类/金额/备注
   for (let i = 0; i < Math.min(rows.length, 60); i++) {
     const row = rows[i] || [];
     const joined = row.map(c => String(c || '')).join('|');
     if (joined.includes('交易时间') || joined.includes('交易创建时间')) {
       headerRowIdx = i;
       headerRow = row.map(c => String(c || '').trim());
+      break;
+    }
+    // 兼容「自己导出再导入」；微信/支付宝表头不含「日期」，不会误判
+    if (joined.includes('日期') && joined.includes('类型') && joined.includes('金额')) {
+      headerRowIdx = i;
+      headerRow = row.map(c => String(c || '').trim());
+      ownFormat = true;
       break;
     }
   }
@@ -2779,6 +2894,49 @@ function parseBillRows(rows) {
     }
     return -1;
   };
+
+  // 本应用导出的格式：分类按名称回填 id，找不到就用兜底分类，避免整条导入失败
+  if (ownFormat) {
+    const cDate = findCol(['日期']);
+    const cType = findCol(['类型']);
+    const cCat  = findCol(['分类']);
+    const cAmt  = findCol(['金额']);
+    const cNote = findCol(['备注']);
+    if (cDate < 0 || cType < 0 || cAmt < 0) throw new Error('缺少必要列');
+
+    const items = [];
+    let skipped = 0;
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const dateStr = normalizeDate(String(row[cDate] || '').trim());
+      if (!dateStr) { skipped++; continue; }
+
+      const typeStr = String(row[cType] || '').trim();
+      const type = typeStr === '支出' ? 'expense' : typeStr === '收入' ? 'income' : '';
+      if (!type) { skipped++; continue; }
+
+      // 导出时支出金额是负数，这里取绝对值
+      const rawAmt = String(row[cAmt] || '').replace(/[^\d.]/g, '');
+      const amtNum = parseFloat(rawAmt);
+      if (!rawAmt || !amtNum || amtNum <= 0) { skipped++; continue; }
+
+      const catName = cCat >= 0 ? String(row[cCat] || '').trim() : '';
+      let category = '';
+      if (catName) {
+        const hit = Object.values(CAT_MAP).find(c => c.name === catName && c.type === type);
+        if (hit) category = hit.id;
+      }
+      if (!category) {
+        const fallback = type === 'income' ? CAT_MAP.other_in : CAT_MAP.other;
+        category = (fallback && fallback.id) || (CATEGORIES[type][0] || {}).id || '';
+      }
+      if (!category) { skipped++; continue; }
+
+      const note = String(cNote >= 0 ? row[cNote] : '').replace(/\s+/g, ' ').trim().slice(0, 30);
+      items.push({ type, amount: amtNum.toFixed(2), category, note, date: dateStr });
+    }
+    return { items, skipped };
+  }
 
   const colTime     = findCol(['交易时间', '交易创建时间']);
   const colMerchant = findCol(['交易对方', '对方']);

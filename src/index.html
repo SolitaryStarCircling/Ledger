@@ -91,15 +91,34 @@
           </div>
         </div>
 
+        <div class="chart-type-wrap">
+          <div class="segmented" id="chartTypeSeg" data-count="2" data-type="expense">
+            <div class="seg-thumb"></div>
+            <button class="seg active" data-type="expense">支出</button>
+            <button class="seg" data-type="income">收入</button>
+          </div>
+        </div>
+
         <div class="donut-wrap">
           <svg class="donut" viewBox="0 0 140 140" id="donut"></svg>
           <div class="donut-center">
-            <div class="lbl">支出</div>
+            <div class="lbl" id="donutLabel">支出</div>
             <div class="val" id="donutValue">¥0</div>
           </div>
         </div>
-        <div class="chart-caption">支出表</div>
+        <div class="chart-caption" id="chartCaption">支出表</div>
         <div class="cat-list" id="catList"></div>
+
+        <div class="trend-card">
+          <div class="trend-head">
+            <span class="trend-title">近 6 个月趋势</span>
+            <span class="trend-legend">
+              <i class="tl-dot tl-exp"></i>支出
+              <i class="tl-dot tl-inc"></i>收入
+            </span>
+          </div>
+          <div class="trend-chart" id="trendChart"></div>
+        </div>
       </div>
 
       <!-- 原「分析」页内容，已并入财报页 -->
@@ -170,7 +189,7 @@
         <div class="cd-period" id="catDetailPeriod"></div>
       </div>
       <div class="cd-stats" id="catDetailStats">
-        <div class="cd-stat"><div class="lbl">总支出(元)</div><div class="val" id="cdTotal">0.00</div></div>
+        <div class="cd-stat"><div class="lbl" id="cdTotalLabel">总支出(元)</div><div class="val" id="cdTotal">0.00</div></div>
         <div class="cd-stat"><div class="lbl">单笔均值(元)</div><div class="val" id="cdAvg">0.00</div></div>
         <div class="cd-stat"><div class="lbl">共计</div><div class="val" id="cdCount">0 笔</div></div>
       </div>
