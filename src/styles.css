@@ -720,8 +720,12 @@ html, body {
   align-items: center;
   gap: 12px;
   padding: 11px 0;
+  border-radius: 8px;
+  cursor: pointer;                  /* 支出表行可点进分类明细页 */
+  -webkit-tap-highlight-color: transparent;
   animation: fadeUp .45s cubic-bezier(.2,.8,.2,1) backwards;
 }
+.cat-row:active { background: var(--fill); }
 .cat-row + .cat-row { border-top: 0.5px solid var(--sep); }
 .cat-dot {
   flex: none;
@@ -751,6 +755,87 @@ html, body {
   flex: none;
   font-size: 14.5px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+/* 行尾「N 笔 + 箭头」：提示可点进分类明细页 */
+.cat-right {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.cat-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cat-count {
+  font-size: 11px;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+.cat-chevron {
+  width: 16px; height: 16px;
+  color: var(--text3);
+}
+.cat-chevron svg { width: 100%; height: 100%; display: block; }
+
+/* ============ 分类支出明细页（财报支出表点入） ============ */
+.cd-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 20px 12px;          /* 顶部 40px 与其它页头一致，避开状态栏 */
+}
+.cd-back {
+  flex: none;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--fill);
+  color: var(--text);
+  transition: background .18s, transform .18s;
+}
+.cd-back:active { background: var(--fill-strong); transform: scale(0.94); }
+.cd-back svg { width: 18px; height: 18px; display: block; }
+.cd-title {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  white-space: nowrap; overflow: hidden;
+}
+.cd-period {
+  flex: none;
+  font-size: 12px;
+  color: var(--text3);
+}
+.cd-stats {
+  margin: 0 16px 14px;
+  display: flex;
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border-radius: var(--r-md);
+  padding: 13px 8px;
+  box-shadow: var(--sh-2), inset 0 0 0 0.5px var(--hairline);
+}
+.cd-stat {
+  flex: 1;
+  text-align: center;
+}
+.cd-stat + .cd-stat { border-left: 0.5px solid var(--sep); }
+.cd-stat .lbl {
+  font-size: 11.5px;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+.cd-stat .val {
+  font-size: 16px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.2px;
 }

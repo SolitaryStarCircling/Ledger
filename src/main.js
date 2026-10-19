@@ -281,6 +281,7 @@ function renderHome() {
         });
     const cta = listEl.querySelector('#emptyCta');
     if (cta) cta.addEventListener('click', () => openSheet());
+    refreshCatDetailIfOpen(); // 数据变更可能让明细页变空，开着时同步重绘
     return;
   }
 
@@ -331,6 +332,7 @@ function renderHome() {
 
   listEl.innerHTML = html;
   listEl.querySelectorAll('.tx-row').forEach(row => bindSwipe(row));
+  refreshCatDetailIfOpen(); // 明细页开着时随数据变更同步重绘
 }
 
 function escapeHtml(s) {
@@ -588,6 +590,10 @@ let selectMode = false;
 const selectedIds = new Set();
 
 function enterSelect(initialId) {
+  // 多选只属于首页流水：其它页面（如分类明细页）长按触发时直接忽略，
+  // 否则 toggleSelectAll 只查 #txList 的行，会看不见地选中并误删无关账目
+  const activePage = document.querySelector('.page.active');
+  if (!activePage || activePage.id !== 'page-home') return;
   if (selectMode) return;
   selectMode = true;
   selectedIds.clear();
@@ -1828,11 +1834,14 @@ function renderStats() {
   animateNumber($('#donutValue'), Number($('#donutValue').dataset.val || 0), expense, 620, fmtMoney);
   $('#donutValue').dataset.val = expense;
 
+  // 按分类聚合金额与笔数：笔数用于支出表行的「N 笔」入口，明细页复用同一口径
   const byCat = {};
   periodTx.filter(t => t.type === 'expense').forEach(t => {
-    byCat[t.category] = (byCat[t.category] || 0) + t.amount;
+    const e = byCat[t.category] || (byCat[t.category] = { amt: 0, count: 0 });
+    e.amt += t.amount;
+    e.count += 1;
   });
-  const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const entries = Object.entries(byCat).sort((a, b) => b[1].amt - a[1].amt);
   const total = expense;
 
   const R = 52, C = 2 * Math.PI * R;
@@ -1845,14 +1854,15 @@ function renderStats() {
       icon: IC('<circle cx="12" cy="12" r="8.2"/><path d="M12 12l3-3"/>'),
       title: '该周期还没有支出',
     });
+    refreshCatDetailIfOpen(); // 数据变更可能让明细页变空，开着时同步重绘
     return;
   }
 
   let offset = 0;
   let svg = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--fill)" stroke-width="16"/>`;
-  entries.forEach(([id, amt]) => {
+  entries.forEach(([id, e]) => {
     const cat = CAT_MAP[id] || { color: '#8E8E93' };
-    const len = (amt / total) * C;
+    const len = (e.amt / total) * C;
     const gap = entries.length > 1 ? 2 : 0;
     svg += `<circle class="ring-seg" cx="70" cy="70" r="${R}" fill="none"
       stroke="${cat.color}" stroke-width="16"
@@ -1864,16 +1874,20 @@ function renderStats() {
   donut.innerHTML = svg;
 
   let html = '';
-  entries.forEach(([id, amt], i) => {
+  entries.forEach(([id, e], i) => {
     const cat = CAT_MAP[id] || { name: '其他', color: '#8E8E93' };
-    const pct = (amt / total) * 100;
-    html += `<div class="cat-row" style="animation-delay:${i * 45}ms">
+    const pct = (e.amt / total) * 100;
+    // 支出表行可点进分类明细页：data-cat 供 #catList 事件委托取用
+    html += `<div class="cat-row" data-cat="${escapeHtml(id)}" role="button" tabindex="0" style="animation-delay:${i * 45}ms">
       <div class="cat-dot" style="background:${cat.color}"></div>
       <div class="cat-mid">
         <div class="cat-line"><span>${escapeHtml(cat.name)}</span><span class="pct">${pct.toFixed(1)}%</span></div>
         <div class="cat-bar"><i data-w="${pct}" style="background:${cat.color}"></i></div>
       </div>
-      <div class="cat-amt">${fmtMoney(amt)}</div>
+      <div class="cat-right">
+        <div class="cat-amt">${fmtMoney(e.amt)}</div>
+        <div class="cat-meta"><span class="cat-count">${e.count} 笔</span><span class="cat-chevron">${IC('<path d="M9 6l6 6-6 6"/>')}</span></div>
+      </div>
     </div>`;
   });
   $('#catList').innerHTML = html;
@@ -1886,6 +1900,7 @@ function renderStats() {
       el.style.width = Math.max(parseFloat(el.dataset.w), 1.5) + '%';
     });
   });
+  refreshCatDetailIfOpen(); // 明细页开着时随数据变更同步重绘
 }
 
 /* 「结余范围」面板：取代原来顶部那排 年/月/周/天 分段控件。
@@ -1991,10 +2006,116 @@ function switchTab(name) {
 
 $$('.tab').forEach(t => {
   t.addEventListener('click', () => {
-    if (t.classList.contains('active')) return;
+    // 明细页打开时「财报」tab 仍高亮，普通 active 守卫会让它点不动；
+    // 此时任意 tab 点击都应放行（点财报=返回列表，点其它=正常切换）
+    const onDetail = $('#page-catdetail').classList.contains('active');
+    if (t.classList.contains('active') && !onDetail) return;
     switchTab(t.dataset.tab);
   });
 });
+
+/* ================= 分类支出明细页（财报支出表点入） ================= */
+let curCatId = null; // 明细页当前分类；注意与记账面板的 curCat（选中分类）无关
+
+/** 明细页统计列用纯数字千分位两位小数（不带 ¥），口径与演示稿一致 */
+const fmtNum = n => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function openCatDetail(catId) {
+  if (selectMode) exitSelect(); // 明细页与首页多选互斥，避免误操作
+  curCatId = catId;
+  renderCatDetail(catId);
+  // 不走 switchTab：财报 tab 保持高亮，返回/切 tab 由各自监听处理
+  $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-catdetail'));
+  const page = $('#page-catdetail');
+  if (page) page.scrollTop = 0;
+}
+
+function closeCatDetail() {
+  curCatId = null;
+  switchTab('stats');
+}
+
+/** 数据变更后若明细页开着则重绘；由 renderHome / renderStats 末尾调用兜住全部刷新路径 */
+function refreshCatDetailIfOpen() {
+  const page = $('#page-catdetail');
+  if (page && page.classList.contains('active') && curCatId) renderCatDetail(curCatId);
+}
+
+function renderCatDetail(catId) {
+  const range = getPeriodRange(curPeriod);
+  const cat = CAT_MAP[catId] || DEFAULT_CAT || { name: '其他', color: '#8E8E93', icon: '' };
+
+  $('#catDetailDot').style.background = cat.color;
+  $('#catDetailTitle').textContent = cat.name;
+  $('#catDetailPeriod').textContent = range.label;
+
+  const items = txs
+    .filter(t => t.type === 'expense' && t.category === catId && t.date >= range.start && t.date <= range.end)
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
+
+  const total = items.reduce((s, t) => s + t.amount, 0);
+  $('#cdTotal').textContent = fmtNum(total);
+  $('#cdAvg').textContent = fmtNum(items.length ? total / items.length : 0);
+  $('#cdCount').textContent = items.length + ' 笔';
+
+  const listEl = $('#catDetailList');
+  if (!items.length) {
+    listEl.innerHTML = emptyState({
+      variant: 'compact',
+      icon: IC('<circle cx="12" cy="12" r="8.2"/><path d="M12 12l3-3"/>'),
+      title: '该周期还没有支出',
+    });
+    return;
+  }
+
+  // 按日分组（日期倒序），沿用首页 day-group / tx-row 模板与滑动操作
+  const groups = {};
+  items.forEach(t => (groups[t.date] = groups[t.date] || []).push(t));
+  const dates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+  let html = '';
+  dates.forEach((ds, idx) => {
+    const gItems = groups[ds];
+    const dayExpense = gItems.reduce((s, t) => s + t.amount, 0);
+    html += `<div class="day-group" style="animation-delay:${Math.min(idx * 45, 260)}ms">
+      <div class="day-header"><span>${dayLabel(ds)}</span><span class="sum">支出 ${fmtMoney(dayExpense)}</span></div>
+      <div class="card">`;
+    gItems.forEach(t => {
+      // 真实数据无 time/merchant 字段，时间从 createdAt 毫秒时间戳推导
+      const d = new Date(t.createdAt || 0);
+      const clock = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+      html += `<div class="tx-row" data-id="${t.id}">
+        <div class="tx-delete">删除</div>
+        <div class="tx-content">
+          <div class="tx-icon" style="color:${cat.color}">${cat.icon}</div>
+          <div class="tx-main">
+            <div class="tx-name">${escapeHtml(t.note || cat.name)}</div>
+            <div class="tx-note">${clock}</div>
+          </div>
+          <div class="tx-amount">-${fmtMoney(t.amount)}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('.tx-row').forEach(row => bindSwipe(row));
+}
+
+// 支出表行点击/回车 → 明细页。事件委托：catList 每次 renderStats 都会整体重绘
+const _catList = $('#catList');
+if (_catList) {
+  const openFromRow = target => {
+    const row = target.closest('.cat-row');
+    if (row && row.dataset.cat) openCatDetail(row.dataset.cat);
+  };
+  _catList.addEventListener('click', e => openFromRow(e.target));
+  _catList.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFromRow(e.target); }
+  });
+}
+$('#catDetailBack').addEventListener('click', closeCatDetail);
 
 /* ================= 记账面板 ================= */
 let amountStr = '0';

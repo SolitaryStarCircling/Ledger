@@ -157,6 +157,26 @@
       </div>
     </section>
 
+    <!-- 分类支出明细页（从财报页支出表点入） -->
+    <section class="page" id="page-catdetail">
+      <div class="cd-header">
+        <button class="cd-back" id="catDetailBack" aria-label="返回财报">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="cd-title">
+          <span class="cat-dot" id="catDetailDot"></span>
+          <span id="catDetailTitle">分类明细</span>
+        </div>
+        <div class="cd-period" id="catDetailPeriod"></div>
+      </div>
+      <div class="cd-stats" id="catDetailStats">
+        <div class="cd-stat"><div class="lbl">总支出(元)</div><div class="val" id="cdTotal">0.00</div></div>
+        <div class="cd-stat"><div class="lbl">单笔均值(元)</div><div class="val" id="cdAvg">0.00</div></div>
+        <div class="cd-stat"><div class="lbl">共计</div><div class="val" id="cdCount">0 笔</div></div>
+      </div>
+      <div id="catDetailList"></div>
+    </section>
+
     <!-- 设置页 -->
     <section class="page" id="page-settings">
       <div class="settings-header">
