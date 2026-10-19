@@ -7,6 +7,8 @@
 ![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Windows-8A678A)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
+**下载：[最新版本 →](https://github.com/SolitaryStarCircling/Ledger/releases/latest)** Android APK 直接安装 · 无需账号 · 无需联网
+
 ---
 
 ## 界面预览
