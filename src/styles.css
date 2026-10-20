@@ -342,6 +342,17 @@ html, body {
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
+/* 环比行：负 margin 抵消上面 16px 的底边距，收紧到 6px */
+.summary-delta {
+  margin: -10px 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+.summary-delta b { font-weight: 600; color: var(--text2); }
+.summary-delta b.up { color: var(--red); }
+.summary-delta b.down { color: var(--green); }
 .summary-row {
   display: flex;
   gap: 22px;
@@ -1995,6 +2006,7 @@ html, body {
   color: #fff;
 }
 .save-done .sd-icon svg { width: 15px; height: 15px; }
+.save-done.warn .sd-icon { background: var(--red); }
 
 /* ============ 导入进度层 ============ */
 .import-progress {

@@ -59,6 +59,16 @@ fn update_date(
 }
 
 #[tauri::command]
+fn update_note(
+    state: DbState<'_>,
+    id: String,
+    note: String,
+) -> Result<models::Transaction, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    service::update_note(&conn, &id, &note)
+}
+
+#[tauri::command]
 fn delete_tx(state: DbState<'_>, id: String) -> Result<bool, String> {
     let conn = state.lock().map_err(|e| e.to_string())?;
     service::delete(&conn, &id)
@@ -523,6 +533,7 @@ pub fn run() {
             add_tx,
             update_amount,
             update_date,
+            update_note,
             delete_tx,
             clear_all_tx,
             update_category_batch,

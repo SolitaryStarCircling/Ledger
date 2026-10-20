@@ -32,13 +32,14 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 - 新增支出 / 收入，数字键盘输入，金额以「分」为单位存储，杜绝浮点误差
 - 月流水按天分组，展示当日收支合计，顶部卡片汇总本月支出 / 收入 / 结余
 - 任意历史月份切换（前 12 个月 ~ 后 3 个月）
-- 修改金额、修改日期、删除记录、清空全部记录
+- 修改金额、修改日期、修改备注、删除记录、清空全部记录
 - 快捷模板：把常用账目存成模板，一键记账
 
 **统计**
 
 - 年 / 月 / 周 / 天四种周期切换（周起点为周一）
 - 圆环图展示分类支出占比，下方按金额降序排列分类明细
+- 明细页顶部展示本月支出**较上月环比**（上月无支出记录时自动隐藏）
 - 结余 = 收入 − 支出，正负分色显示
 
 **分类与预算**
@@ -46,7 +47,7 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 - 分类增删改、拖拽排序、使用频率统计
 - 删除分类时记录可转移至兜底分类，不产生孤儿数据
 - 分类名同一类型下不重复；批量改分类时目标分类需与记录收支方向一致，避免统计串类
-- 月度预算设置
+- 月度预算设置，超支时给出醒目提醒（打开应用若本月已超支会提示，记账刚好跨过预算线时也会提示）
 - 账单导入支持自定义关键词自动归类规则（规则优先于内置关键词）
 
 **账户安全**
@@ -71,9 +72,9 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 | 层 | 技术 | 版本 | 说明 |
 |---|---|---|---|
 | 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
-| 后端 | Rust (edition 2021) | — | 8 个模块，注册 **35 个 `#[tauri::command]`** |
+| 后端 | Rust (edition 2021) | — | 8 个模块，注册 **36 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
-| 前端 | 原生 HTML / CSS / ES Module | — | 0 npm 依赖、0 构建步骤：`main.js` 3474 行、`styles.css` 2218 行、`index.html` 653 行；Excel 解析库以静态文件随包分发于 `src/vendor/` |
+| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4221 行、`styles.css` 2461 行、`index.html` 773 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
 | 密码哈希 | argon2（Argon2id，纯 Rust） | 0.5 | 应用锁 PIN 哈希，无 C 依赖 |
@@ -90,17 +91,19 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 
 建表语句幂等（`CREATE TABLE IF NOT EXISTS`），共 5 张表：
 
-| 表 | 用途 | 关键设计 |
-|---|---|---|
-| `transactions` | 流水 | `amount_cents INTEGER`；`type` 带 `CHECK IN ('expense','income')`；`date` 建索引 |
-| `categories` | 分类 | `icon` / `color` / `sort` / `builtin`，支持拖拽排序 |
-| `budgets` | 月度预算 | `month` 主键 |
-| `templates` | 常用项 | 与流水同构，去掉日期 |
-| `settings` | 键值配置 | 主题、应用锁（`lock_enabled` / `lock_pin_hash`）、自定义分类规则（`cat_rules`）、AI 服务商配置等 |
+| 表 | 用途与关键设计 |
+|---|---|
+| `transactions` | 流水；`amount_cents INTEGER`、`type` 带 `CHECK IN ('expense','income')`、`date` 建索引 |
+| `categories` | 分类；`icon` / `color` / `sort` / `builtin`，支持拖拽排序 |
+| `budgets` | 月度预算；`month` 主键 |
+| `templates` | 常用项；与流水同构，去掉日期 |
+| `settings` | 键值配置；主题、应用锁、分类规则 `cat_rules`、AI 服务商配置等 |
 
 **兼容性处理**：首次启动写入 13 条预置分类，其 `id` 沿用历史硬编码值，保证旧记录 100% 兼容；预置写入只在建表那一次执行，用户删掉后不会复活。
 
 **金额全程不出现浮点**：后端以整数「分」落库，对外用 `"12.34"` 字符串传输，解析时逐位校验（单一小数点、整数位 ≤ 9、小数位 ≤ 2、必须 > 0）。
+
+> 完整的模块依赖图、36 个命令契约、并发模型、DDL 全文与设计取舍见 [ARCHITECTURE.md §2–§8](./ARCHITECTURE.md#2-模块结构)。
 
 ---
 
@@ -108,14 +111,12 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 
 - **默认零网络**：不点「分析」就不会有任何出站请求
 - **应用锁 PIN 只存本地**：密码以 Argon2id 哈希存本机 `settings` 表，只做本地校验、不上云；它用于「防本机误看」，并不加密磁盘上的数据库文件（磁盘级加密属另一层能力，未越界实现）
-- **本地 / 内网地址自动识别**：`localhost`、`127.0.0.1`、`::1`、`*.local`、`host.docker.internal`、`10.x`、`192.168.x`、`172.16–31.x`、`169.254.x` 视为自建服务，免 Key 且放宽超时（120s，云端 45s）
-- **API Key 三档存储**（系统钥匙串仅 Windows 可用，Android 上自动回落到后两档）：
-  1. 系统凭据管理器（Windows 凭据管理器）
-  2. 本机数据库
-  3. **仅内存**（进程内 `Mutex<Option<String>>`，退出即失效）
+- **API Key 三档存储**：系统凭据管理器（仅 Windows）→ 本机数据库 → **仅内存**（进程内 `Mutex<Option<String>>`，退出即失效）；Android 自动回落到后两档
 - **Key 不回传前端**：界面只回显前 3 后 4 位掩码；旧版本的 `deepseek_api_key` 自动迁移
 - **备份不带凭据**：导出走临时副本库并清除 `ai_api_key` / `deepseek_api_key` / `ai_key_hint`，任一环节失败自动回退原始字节，保证导出功能本身不受影响
 - **导入是原子的**：临时文件 → `ATTACH DATABASE` → 校验 `sqlite_master` 中确有 `transactions` 表 → 事务内整体覆盖并提交 → `DETACH` 清理；缺 `budgets` / `templates` / `categories` 的旧备份自动跳过对应表；分类按「合并」导入（同 id 覆盖），不整表清空，避免备份缺分类时把兜底分类「其他」一并删掉
+
+> 本地 / 内网地址白名单与超时差异（120s / 45s）、Key 掩码规则、导入范围声明的完整实现见 [ARCHITECTURE.md §6–§7](./ARCHITECTURE.md#6-安全与隐私边界)。
 
 ---
 
@@ -125,19 +126,23 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 
 - **降级阶梯**：`json_mode + thinking` → `仅 json_mode` → `纯文本`，逐档重试
 - **可重试判定**：只有 400 / 404 / 422 且响应体明确提示 `response_format`、`json_object`、`thinking`、`unsupported` 等关键字时，才判定为「参数不支持」并降级；401 / 402 / 429 / 5xx 映射为可读中文提示，不盲目重试
-- **参数适配**：`thinking` 只发给 DeepSeek；推理类模型（`reasoner` / `r1` / `o1` / `o3` / `o4`）自动去掉 `temperature`
+- **参数适配**：`thinking` 只发给 DeepSeek；推理类模型（`reasoner` / `reasoning` / `r1` / `o1` / `o3` / `o4` / `thinking`）自动去掉 `temperature`
 - **Base URL 归一化**：自动补 `/chat/completions`，已带路径则不重复拼接
 - **输出解析容错**：剥离 Markdown 代码块围栏、取首 `{` 到末 `}`、字段别名兜底（`verdict` / `评价` / `status`）、数字兼容字符串，以适配小模型的不规范输出
 - **可配置**：服务商 / Base URL / 模型名均可自行修改，兼容任意 OpenAI 风格接口；默认指向 DeepSeek
+
+> 降级状态机、可重试判定的关键字表、本地地址识别与超时差异、解析容错的字段别名全集见 [ARCHITECTURE.md §7](./ARCHITECTURE.md#7-ai-子系统)。
 
 ---
 
 ## 工程质量
 
-- 后端 `src-tauri/src` 含 **22 个 Rust 单元测试**（`service.rs` 6 个、`ai.rs` 11 个、`keys.rs` 3 个、`lock.rs` 2 个，另有 1 个联网测试默认 `ignore`）
-- 覆盖：围栏剥离、字段别名与非法输出兜底、Base URL 去重、本地地址识别、能力降级可重试性判定、id 唯一性（同毫秒连续写入不撞车）、分类删除的兜底校验、批量改分类的收支方向守卫、同一类型下分类名去重、PIN 哈希往返与格式校验
-- 用 `TcpListener` 起 mock OpenAI 服务端做**端到端降级验证**，另有一条真实 TLS 连通性测试
+- 后端 `src-tauri/src` 含 **24 个 Rust 用例**（默认执行 23 个：`service.rs` 7 个、`ai.rs` 11 个、`keys.rs` 3 个、`lock.rs` 2 个；另有 1 个联网测试 `#[ignore]`）
+- 覆盖：围栏剥离、字段别名与非法输出兜底、Base URL 去重、本地地址识别、能力降级可重试性判定、id 唯一性（同毫秒连续写入不撞车）、单条改备注（trim、清空放行、超 30 字与不存在记录被拒）、分类删除的兜底校验、批量改分类的收支方向守卫、同一类型下分类名去重、PIN 哈希往返与格式校验
+- 用 `TcpListener` 起 mock OpenAI 服务端做**端到端降级验证**，另有一条真实 TLS 连通性测试；测试全部走内存库或本地 mock，不触碰真实数据
 - 圆环图手写 SVG（`stroke-dasharray` / `stroke-dashoffset` + 缓动过渡），不引入图表库
+
+> 各模块的测试分布与覆盖点、前端手工验收用例清单与验收标准（DoD）见 [ARCHITECTURE.md §15](./ARCHITECTURE.md#15-测试策略)。
 
 ---
 
@@ -152,7 +157,7 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 ## 快速开始
 
 ```bash
-npm install          # 安装 Tauri CLI 及前端依赖
+npm install          # 仅安装 Tauri CLI（前端零依赖、零构建步骤）
 
 npm run tauri dev    # 桌面端开发模式，热重载
 ```
@@ -162,8 +167,10 @@ npm run tauri dev    # 桌面端开发模式，热重载
 ```bash
 npm run tauri android init     # 生成 gen/android 工程（首次，之后已入库无需再跑）
 npm run tauri android dev      # 真机 / 模拟器调试
-npm run tauri android build    # 产出 APK / AAB
+npm run android:release:arm64  # 出 Android 发布包（仅编译 arm64）→ app-arm64-release.apk（上传前需改名为 Ledger-<版本号>-arm64.apk）
 ```
+
+> 出 Android 发布包推荐使用 `npm run android:release:arm64`（只编译 aarch64）。
 
 > `src-tauri/gen/android/` 下的 Gradle 工程已纳入版本管理（Tauri 生成的 `.gitignore` 只排除 `build`、`.gradle` 等编译产物），因此克隆后可直接构建，无需重新 `init`。
 
@@ -195,7 +202,7 @@ ledger/
 ├── src-tauri/                  Rust 后端
 │   ├── src/
 │   │   ├── main.rs             入口
-│   │   ├── lib.rs              Tauri 命令注册（35 个 invoke 命令）
+│   │   ├── lib.rs              Tauri 命令注册（36 个 invoke 命令）
 │   │   ├── models.rs           数据结构
 │   │   ├── db.rs               SQLite 连接与建表
 │   │   ├── service.rs          业务逻辑：金额 / 日期 / 分类校验、增删改查
@@ -207,7 +214,11 @@ ledger/
 │   ├── gen/android/            Android 工程
 │   ├── Cargo.toml
 │   └── tauri.conf.json
+├── docs/                       截图（明细页 / 记账面板 / 财报页）
+├── ARCHITECTURE.md             架构文档（中文）：36 个命令契约 / 数据模型 / 设计取舍
+├── ARCHITECTURE.en.md          架构文档（英文）
 ├── package.json
+├── LICENSE                     MIT
 └── .gitattributes
 ```
 

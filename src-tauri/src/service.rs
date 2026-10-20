@@ -202,6 +202,18 @@ pub fn update_date(conn: &Connection, id: &str, date: &str) -> Result<Transactio
     get(conn, id).map_err(|e| e.to_string())?.ok_or_else(|| "记录不存在".into())
 }
 
+pub fn update_note(conn: &Connection, id: &str, note: &str) -> Result<Transaction, String> {
+    let note = normalize_note(note)?;
+    let changed = conn
+        .execute(
+            "UPDATE transactions SET note = ?1 WHERE id = ?2",
+            params![note, id],
+        )
+        .map_err(|e| e.to_string())?;
+    if changed == 0 { return Err(format!("记录不存在: {}", id)); }
+    get(conn, id).map_err(|e| e.to_string())?.ok_or_else(|| "记录不存在".into())
+}
+
 pub fn delete(conn: &Connection, id: &str) -> Result<bool, String> {
     let changed = conn
         .execute("DELETE FROM transactions WHERE id = ?1", params![id])
@@ -845,6 +857,24 @@ mod tests {
 
         let near = (today() - chrono::Duration::days(3)).format("%Y-%m-%d").to_string();
         assert!(update_date(&conn, &t.id, &near).is_ok(), "窗口内日期应允许");
+    }
+
+    /// 单条记录改备注：trim 后落库，超过 30 字拒绝，记录不存在时报错
+    #[test]
+    fn update_note_trims_and_rejects_over_30_chars() {
+        let conn = mem_db();
+        let t = add(&conn, "expense", "12.00", "food", "旧备注", "2026-01-01").unwrap();
+
+        let updated = update_note(&conn, &t.id, "  新备注  ").unwrap();
+        assert_eq!(updated.note, "新备注", "首尾空白应被 trim 掉");
+        assert_eq!(updated.amount, "12.00", "改备注不能动金额");
+
+        assert!(update_note(&conn, &t.id, "").is_ok(), "备注允许清空");
+        let ok30 = "字".repeat(30);
+        assert!(update_note(&conn, &t.id, &ok30).is_ok(), "正好 30 字应放行");
+        let over31 = "字".repeat(31);
+        assert!(update_note(&conn, &t.id, &over31).is_err(), "31 字应拒绝");
+        assert!(update_note(&conn, "no-such-id", "x").is_err(), "不存在的记录应报错");
     }
 
     /// 回归(Bug1)：批量改分类时，目标分类必须与每条被选记录同向，

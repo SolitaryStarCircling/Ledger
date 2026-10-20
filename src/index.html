@@ -39,6 +39,7 @@
       <div class="summary-card">
         <button class="summary-label" id="summaryLabel">本月支出 <span class="arrow">▼</span></button>
         <div class="summary-amount" id="monthExpense">¥0.00</div>
+        <div class="summary-delta" id="monthDelta" hidden></div>
         <div class="summary-row">
           <div class="item"><span class="s-dot"></span>收入 <b id="monthIncome">¥0.00</b></div>
           <div class="item"><span class="s-dot"></span>结余 <b id="monthBalance">¥0.00</b></div>
@@ -466,6 +467,7 @@
     <div class="action-head">要修改哪一项？</div>
     <button class="action-btn" data-act="editAmount">修改金额</button>
     <button class="action-btn" data-act="editDate">修改时间</button>
+    <button class="action-btn" data-act="editNote">修改备注</button>
     <button class="action-btn cancel" data-act="cancel">取消</button>
   </div>
 
@@ -520,6 +522,15 @@
     <div class="edit-actions">
       <button class="action-btn cancel" data-act="cancel">取消</button>
       <button class="action-btn primary" id="budgetSave">保存</button>
+    </div>
+  </div>
+
+  <div class="action-sheet" id="editNoteSheet">
+    <div class="action-head">修改备注</div>
+    <input class="note-input" id="editNoteInput" type="text" placeholder="添加备注…" maxlength="30">
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="editNoteSave">保存</button>
     </div>
   </div>
 

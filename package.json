@@ -4,7 +4,8 @@
   "version": "1.4.0",
   "type": "module",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "android:release:arm64": "tauri android build --apk --split-per-abi -t aarch64"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

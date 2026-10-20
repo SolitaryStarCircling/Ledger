@@ -167,20 +167,41 @@ function toast(msg) {
   t._tid = setTimeout(() => t.classList.remove('show'), 1500);
 }
 
-/** 记账成功：居中的「确认感」反馈卡（绿色对勾 + 文字，回弹淡入） */
-function showSavedFeedback(msg) {
+/** 记账成功：居中的「确认感」反馈卡（绿色对勾 + 文字，回弹淡入）
+    warn=true 时换成红色警示样式并停留更久，用于超支提醒 */
+function showSavedFeedback(msg, warn) {
   let el = $('.save-done');
   if (el) { clearTimeout(el._tid); el.remove(); }
   el = document.createElement('div');
-  el.className = 'save-done';
-  el.innerHTML = `<span class="sd-icon">${IC('<path d="M4.5 12.5l4.3 4.3L19.5 7.2"/>')}</span><span class="sd-text"></span>`;
+  el.className = 'save-done' + (warn ? ' warn' : '');
+  const icon = warn
+    ? IC('<path d="M12 3.5 21 19H3L12 3.5Z"/><path d="M12 9.5v4"/><path d="M12 16.4v.1"/>')
+    : IC('<path d="M4.5 12.5l4.3 4.3L19.5 7.2"/>');
+  el.innerHTML = `<span class="sd-icon">${icon}</span><span class="sd-text"></span>`;
   el.querySelector('.sd-text').textContent = msg;
   $('#app').appendChild(el);
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
   el._tid = setTimeout(() => {
     el.classList.remove('show');
     setTimeout(() => el.remove(), 500);
-  }, 1600);
+  }, warn ? 3200 : 1600);
+}
+
+/** 打开应用时若当前查看月份已超支，给一次居中提醒（不拦操作，自动消失）。
+    预算条上虽然有「已超支」，但它在卡片内部，容易被忽略 */
+function alertIfOverBudget() {
+  if (!monthlyBudget || monthlyBudget <= 0) return;
+  const spent = txs
+    .filter(t => t.type === 'expense' && t.date.startsWith(viewMonth))
+    .reduce((s, t) => s + t.amount, 0);
+  if (spent <= monthlyBudget) return;
+  setTimeout(
+    () => showSavedFeedback(
+      `本月已超支 ${fmtMoneyShort(spent - monthlyBudget)} · 已花 ${fmtMoneyShort(spent)} / ${fmtMoneyShort(monthlyBudget)}`,
+      true
+    ),
+    420
+  );
 }
 
 /** 导入账单进度层：显示百分比 + 文案，返回 { update, close } */
@@ -239,6 +260,29 @@ function updateMonthLabel() {
 }
 
 /* ================= 首页渲染 ================= */
+
+/** 首页大数字下方的「较上月 ±X%」；上月无支出时整行隐藏，搜索态也隐藏
+    （搜索时大数字是跨月过滤结果，与之环比没有意义） */
+function renderDelta(curExpense) {
+  const el = $('#monthDelta');
+  if (!el) return;
+  if (normalizeForSearch(searchQuery.trim())) { el.hidden = true; return; }
+
+  const prevExpense = txs
+    .filter(t => t.type === 'expense' && t.date.startsWith(prevMonthOf(viewMonth)))
+    .reduce((s, t) => s + t.amount, 0);
+  if (prevExpense <= 0) { el.hidden = true; return; }
+
+  const pct = (curExpense - prevExpense) / prevExpense * 100;
+  el.hidden = false;
+  if (Math.abs(pct) < 0.05) {
+    el.innerHTML = '较上月 <b>持平</b>';
+    return;
+  }
+  const up = pct > 0;                     // 支出变多是坏消息，用红色
+  el.innerHTML = `较上月 <b class="${up ? 'up' : 'down'}">${up ? '+' : ''}${pct.toFixed(1)}%</b>`;
+}
+
 function renderHome() {
   updateMonthLabel();
 
@@ -259,6 +303,7 @@ function renderHome() {
   setNumber($('#monthIncome'), income);
   setNumber($('#monthBalance'), income - expense);
 
+  renderDelta(expense);
   renderBudget();
   renderQuickRow();
   syncGestureHint(monthTx.length > 0);
@@ -1347,6 +1392,7 @@ const actionSheet    = $('#actionSheet');
 const editTypeSheet  = $('#editTypeSheet');
 const editAmountSheet = $('#editAmountSheet');
 const editDateSheet  = $('#editDateSheet');
+const editNoteSheet  = $('#editNoteSheet');
 const confirmBox     = $('#confirmBox');
 const monthPickerSheet = $('#monthPickerSheet');
 const weekPickerSheet  = $('#weekPickerSheet');
@@ -1366,7 +1412,7 @@ const lockEnableSheet  = $('#lockEnableSheet');
 const catRuleSheet     = $('#catRuleSheet');
 const exportFormatSheet= $('#exportFormatSheet');
 const importFormatSheet= $('#importFormatSheet');
-const allPanels = [actionSheet, editTypeSheet, editAmountSheet, editDateSheet,
+const allPanels = [actionSheet, editTypeSheet, editAmountSheet, editDateSheet, editNoteSheet,
                    monthPickerSheet, weekPickerSheet, dayPickerSheet, batchCatSheet, budgetSheet,
                    tplSheet, calSheet, catManageSheet, catEditSheet, aiKeySheet, aiProviderSheet,
                    periodSheet, lockManageSheet, lockConfirmSheet, lockEnableSheet, catRuleSheet, exportFormatSheet, importFormatSheet];
@@ -1554,6 +1600,37 @@ $('#editDateSave').addEventListener('click', async () => {
   closeModal();
 });
 
+/* ================= 单条记录：修改备注 ================= */
+function showEditNote() {
+  const tx = txs.find(t => String(t.id) === String(targetTxId));
+  if (!tx) return;
+  const input = $('#editNoteInput');
+  input.value = tx.note || '';
+  openModal(editNoteSheet);
+  // 等面板入场后再聚焦，否则移动端软键盘会把入场动画顶掉
+  setTimeout(() => {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, 240);
+}
+
+$('#editNoteSave').addEventListener('click', async () => {
+  try {
+    await invoke('update_note', { id: String(targetTxId), note: $('#editNoteInput').value.trim() });
+    await refreshTxs();
+    renderHome();
+    if ($('#page-stats').classList.contains('active')) renderStats();
+    toast('备注已修改');
+  } catch (e) {
+    toast('修改失败：' + e);
+  }
+  closeModal();
+});
+
+$('#editNoteInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); $('#editNoteSave').click(); }
+});
+
 function showConfirmDelete() { openModal('alert'); }
 
 $('#confirmDeleteBtn').addEventListener('click', async () => {
@@ -1581,11 +1658,12 @@ $('#confirmDeleteBtn').addEventListener('click', async () => {
     else if (act === 'multi') { closeModal(); enterSelect(targetTxId); }
     else if (act === 'editAmount') showEditAmount();
     else if (act === 'editDate') showEditDate();
+    else if (act === 'editNote') showEditNote();
     else if (act === 'cancel') closeModal();
   });
 });
 
-[editAmountSheet, editDateSheet, confirmBox, budgetSheet].forEach(panel => {
+[editAmountSheet, editDateSheet, editNoteSheet, confirmBox, budgetSheet].forEach(panel => {
   panel.addEventListener('click', e => {
     const btn = e.target.closest('button');
     if (!btn) return;
@@ -2453,6 +2531,13 @@ async function saveTx() {
       return;
     }
 
+    // 超支跨界判断要用「这一笔之前」的月度支出；refreshTxs 之后旧数据就没了
+    const savedYM = curDate.slice(0, 7);
+    const budgetForSaved = (savedYM === viewMonth && monthlyBudget > 0) ? monthlyBudget : 0;
+    const spentBefore = txs
+      .filter(t => t.type === 'expense' && t.date.startsWith(savedYM))
+      .reduce((s, t) => s + t.amount, 0);
+
     try {
       await invoke('add_tx', {
         txType: curType,
@@ -2463,15 +2548,21 @@ async function saveTx() {
       });
       await refreshTxs();
       closeSheet();
-      const savedYM = curDate.slice(0, 7);
       if (savedYM !== viewMonth && !searchQuery) { viewMonth = savedYM; await loadBudget(); }
       renderHome();
       if ($('#page-stats').classList.contains('active')) renderStats();
       updateRecordCount();
       const spent = todayExpense();
-      const msg = curType === 'income'
+      let msg = curType === 'income'
         ? '收入已记录'
         : (spent > 0 ? `支出已记录 · 今日已花 ${fmtMoneyShort(spent)}` : '支出已记录');
+      // 只在「这一笔刚好把本月从没超支推成超支」时追加，避免每次记账都重复刷同一句
+      if (budgetForSaved > 0 && curType === 'expense') {
+        const spentAfter = spentBefore + amt;
+        if (spentBefore <= budgetForSaved && spentAfter > budgetForSaved) {
+          msg += ` · 本月已超支 ${fmtMoneyShort(spentAfter - budgetForSaved)}`;
+        }
+      }
       setTimeout(() => showSavedFeedback(msg), 220);
     } catch (e) {
       toast('保存失败：' + e);
@@ -4105,6 +4196,7 @@ async function boot() {
   renderBudgetSettingRow();
   renderAiSettingsRows();
   renderLockSettingRow();
+  alertIfOverBudget();
   switchTab('home');
 }
 boot();
