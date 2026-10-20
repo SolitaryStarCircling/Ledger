@@ -15,6 +15,31 @@
 
 ---
 
+## [1.5.1] — 2026-10-20
+
+提交链接待回填。以下改动截至 2026-10-20，由 `git diff` 逐条核对得出。
+
+**修复**
+
+- **Android 端侧滑返回 / 返回键直接退出应用，而不是回到上一个界面**：根因是两处叠加 —— ① 前端是无路由 SPA，页面与弹层全靠切 class，从未调用 `history.pushState`，WebView 历史恒为 1 条；② Tauri 模板把 `WryActivity` 的 `handleBackNavigation` 覆写为 `false`，Activity 不注册任何返回回调。返回手势因此无人拦截，直接走 Activity 默认后退 `finish()` 掉自己。修复须**两条腿同时成立**（缺任一条都无效）：
+  - `MainActivity.kt` 覆写 `handleBackNavigation = true`，返回手势才会先交给 WebView（能回退就回退，历史耗尽才退出应用）
+  - `main.js` 新增返回栈：把「当前 UI 层级」同步进 WebView 历史，返回手势按层级逐层剥离 —— 弹层 → 弹层内二级面板 → AI 视图 → 分类明细页 → 非首页 tab → 首页 → 再按才退出应用
+
+**工程化**
+
+- 层级由实时 DOM 派生（`uiLayers()`，自底向上：`stats`/`catdetail`/`settings` → `ai` → `search` → `select` → `sheet` → `modal` → `lock`）；层数变多 `pushState` 支哨兵、层数不变 `replaceState`、层数变少静默 `back()` 收哨兵
+- 同一轮内的多次界面变化用 `queueMicrotask` 合并为一次历史操作，避免「关一个弹层又开一个」时先排入物理回退再 push 新层导致的层数漂移
+- 程序性回退（UI 路径关闭）与手势回退用 `backSuppress` 计数区分，前者不触发剥层；因此 UI 路径关闭后不多占一次返回
+- 一次手势只剥一层；物理哨兵数少于实时 UI 层数时回退后补齐
+- 锁屏层保护：解锁界面（`verify`）下返回键**一律拒绝**，防止等于绕过密码；设置密码第二步按返回退回第一步（等同点「取消」）
+- 搜索关闭逻辑抽成 `closeSearch()`，与返回栈同步口径统一
+
+**版本号**：`1.5.0` → `1.5.1`（`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock` 四处同步）
+
+**对应代码改动**：`src/main.js` +149/−5、`src-tauri/gen/android/app/src/main/java/com/tauri_app/ledger/MainActivity.kt` +7
+
+---
+
 ## [1.5.0] — 2026-10-20
 
 功能提交 [c1aaaba](https://github.com/SolitaryStarCircling/Ledger/commit/c1aaaba) · 版本号提交 [1b74e84](https://github.com/SolitaryStarCircling/Ledger/commit/1b74e84)。以下改动截至 2026-10-20，由 `git diff` 逐条核对得出。
@@ -150,6 +175,7 @@
 
 | 版本 | 日期 | 版本号提交 | tag |
 |---|---|---|---|
+| 1.5.1 | 2026-10-20 | 待回填 | 未单独发 Release（并入 1.5.5 发布） |
 | 1.5.0 | 2026-10-20 | `1b74e84` | `v1.5.0` |
 | 1.4.0 | 2026-10-19 | `3199811` | `v1.4.0` |
 | 1.3.0 | 2026-10-19 | `9070888` | `v1.3.0` |

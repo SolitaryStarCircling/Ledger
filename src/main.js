@@ -648,6 +648,7 @@ function enterSelect(initialId) {
   $('#selectBar').classList.add('show');
   renderHome();
   updateSelectBar();
+  syncBackState();
 }
 
 function exitSelect() {
@@ -657,6 +658,7 @@ function exitSelect() {
   $('#app').classList.remove('select-mode');
   $('#selectBar').classList.remove('show');
   renderHome();
+  syncBackState();
 }
 
 function toggleSelect(id) {
@@ -1435,6 +1437,7 @@ function openModal(panel) {
   document.body.classList.add('modal-open');
   activePanel = panel;
   modalOpenedAt = Date.now();
+  syncBackState();
 }
 
 /* 新增的三个面板（API Key / 服务商 / 结余范围）的「取消」按钮：
@@ -1455,7 +1458,117 @@ function closeModal() {
   monthPickerCallback = null;
   weekPickerCallback = null;
   dayPickerCallback = null;
+  syncBackState();
 }
+
+/* ================= 系统返回键 / 侧滑返回（Android） =================
+   前端是无路由的 SPA：页面与弹层全靠切换 class 实现，从头到尾没写过
+   history.pushState，WebView 的历史栈永远只有 1 条。Android 的返回手势
+   因此没有任何拦截者，直接走 Activity 默认后退 finish 掉自己 → 表现为
+   「侧滑直接退出应用，而不是回到上一个界面」（见 ARCHITECTURE.md §14）。
+   这里把「当前 UI 层级」同步进 WebView 历史：层数变多 pushState 支起哨兵，
+   层数变少就静默 back() 收掉哨兵；收到返回手势（popstate）时按层级逐层剥掉，
+   剥到最底层再按才交给系统退出。
+   注意 Android 侧还需打开 handleBackNavigation，见
+   src-tauri/gen/android/app/src/main/java/com/tauri_app/ledger/MainActivity.kt。 */
+
+/** 由实时 UI 派生的层级数组（自底向上，顺序 = 返回键的剥离顺序） */
+function uiLayers() {
+  const page = ($('.page.active') || {}).id;
+  const layers = [];
+  if (page === 'page-catdetail') layers.push('stats', 'catdetail');  // 明细页的入口在财报页
+  else if (page === 'page-stats') layers.push('stats');
+  else if (page === 'page-settings') layers.push('settings');
+  if (page === 'page-stats' && statsView === 'ai') layers.push('ai');
+  if (page === 'page-home' && $('#searchBar').classList.contains('show')) layers.push('search');
+  if (selectMode) layers.push('select');
+  if (sheet.classList.contains('show')) layers.push('sheet');
+  if (activePanel) layers.push('modal');
+  if (!lockOverlay.hidden) layers.push('lock');
+  return layers;
+}
+
+const sameLayers = (a, b) => a.length === b.length && a.every((k, i) => k === b[i]);
+
+let syncedLayers = [];   // 已同步进 history 的层级快照
+let sentinelCount = 0;   // 物理历史里已支起的哨兵条数（= 可回退步数）
+let backPending = 0;     // 待静默回退的步数（同一轮内合并后一次性执行）
+let backTimer = 0;
+let backSuppress = 0;    // 静默回退自身的 popstate 计数，不得触发层剥离
+let inBackNav = false;   // 正在响应返回手势：手势驱动的迁移不再改动 history
+let syncScheduled = false;
+
+/** 把当前 UI 层级同步进 history；同一轮内的多次界面变化合并成一次历史操作 */
+function syncBackState() {
+  if (syncScheduled) return;
+  syncScheduled = true;
+  queueMicrotask(commitBackState);
+}
+
+/** 真正的落地动作：按需 push / replace / 静默 back */
+function commitBackState() {
+  syncScheduled = false;
+  if (inBackNav) return;
+  const next = uiLayers();
+  if (sameLayers(next, syncedLayers)) return;
+  if (next.length > syncedLayers.length) {
+    history.pushState({ layers: next }, '');
+    sentinelCount++;
+  } else if (next.length === syncedLayers.length) {
+    history.replaceState({ layers: next }, '');      // 层数不变、内容变了（如弹层换成多选态）
+  } else {
+    backPending += syncedLayers.length - next.length;
+    if (!backTimer) backTimer = setTimeout(flushBack, 0);
+  }
+  syncedLayers = next;
+}
+
+/** 一次性收掉待回退的哨兵；期间产生的 popstate 一律忽略 */
+function flushBack() {
+  backTimer = 0;
+  const n = backPending;
+  backPending = 0;
+  backSuppress += n;
+  for (let i = 0; i < n; i++) history.back();
+}
+
+/** 剥掉最外一层；返回 false 表示这一层不允许被返回键解除（锁屏解锁态） */
+function undoTopLayer() {
+  const layers = uiLayers();
+  const top = layers[layers.length - 1];
+  if (top === 'lock') {
+    if (lockMode === 'verify') return false;   // 解锁界面：返回键不得解除，否则等于绕过密码
+    cancelLockSetup();
+    return true;
+  }
+  if (top === 'modal') { closeModal(); return true; }
+  if (top === 'sheet') { closeSheet(); return true; }
+  if (top === 'select') { exitSelect(); return true; }
+  if (top === 'search') { closeSearch(); return true; }
+  if (top === 'ai') { setStatsView('chart'); return true; }
+  if (top === 'catdetail') { closeCatDetail(); return true; }   // 退回财报页
+  if (top === 'stats' || top === 'settings') { switchTab('home'); return true; }
+  return false;
+}
+
+window.addEventListener('popstate', e => {
+  sentinelCount = Math.max(0, sentinelCount - 1);   // 无论是否程序性回退，物理历史都少了一条哨兵
+  if (backSuppress > 0) { backSuppress--; return; }  // 本次是程序性回退，不剥层
+  const target = Array.isArray(e.state && e.state.layers) ? e.state.layers : [];
+  inBackNav = true;
+  try {
+    // 一次手势只剥一层（层数没变的情况，如两步设置密码时退回第一步，由下面的补齐兜住）
+    if (!sameLayers(uiLayers(), target)) undoTopLayer();
+    // 物理哨兵数少于实时 UI 层数时补齐：锁屏解锁界面拒绝退出、PIN 两步退回同一步都落在这里
+    while (sentinelCount < uiLayers().length) {
+      history.pushState({ layers: uiLayers() }, '');
+      sentinelCount++;
+    }
+  } finally {
+    inBackNav = false;
+    syncedLayers = uiLayers();   // 手势已直接改了 UI，标记为已同步，防止下一轮 diff 误判
+  }
+});
 
 /* ================= 记录操作菜单 ================= */
 function showActionSheet(id) {
@@ -1865,20 +1978,28 @@ $('#summaryLabel').addEventListener('click', () => {
 })();
 
 /* ================= 搜索交互 ================= */
+function closeSearch() {
+  const bar = $('#searchBar');
+  if (!bar.classList.contains('show')) return;
+  bar.classList.remove('show');
+  $('#searchToggle').classList.remove('active');
+  searchQuery = '';
+  $('#searchInput').value = '';
+  if (selectMode) exitSelect(); else renderHome();
+  syncBackState();
+}
+
 $('#searchToggle').addEventListener('click', () => {
   const bar = $('#searchBar');
   const toggle = $('#searchToggle');
   const isOpen = bar.classList.contains('show');
   if (isOpen) {
-    bar.classList.remove('show');
-    toggle.classList.remove('active');
-    searchQuery = '';
-    $('#searchInput').value = '';
-    if (selectMode) exitSelect(); else renderHome();
+    closeSearch();
   } else {
     bar.classList.add('show');
     toggle.classList.add('active');
     setTimeout(() => $('#searchInput').focus(), 100);
+    syncBackState();
   }
 });
 
@@ -2170,6 +2291,7 @@ function setStatsView(view) {
   if (ai) ai.hidden = statsView !== 'ai';
   if (statsView === 'ai') enterAiPage();
   else renderStats();
+  syncBackState();
 }
 
 const _statsViewSeg = $('#statsViewSeg');
@@ -2186,6 +2308,7 @@ function switchTab(name) {
   // 财报页内含「图表 / AI 分析」两个视图，进入时按当前视图渲染
   if (name === 'stats') setTimeout(() => setStatsView(statsView), 60);
   if (name === 'settings') { updateRecordCount(); renderBudgetSettingRow(); renderAiSettingsRows(); renderLockSettingRow(); }
+  syncBackState();
 }
 
 $$('.tab').forEach(t => {
@@ -2214,11 +2337,13 @@ function openCatDetail(catId, type) {
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-catdetail'));
   const page = $('#page-catdetail');
   if (page) page.scrollTop = 0;
+  syncBackState();
 }
 
 function closeCatDetail() {
   curCatId = null;
   switchTab('stats');
+  syncBackState();
 }
 
 /** 数据变更后若明细页开着则重绘；由 renderHome / renderStats 末尾调用兜住全部刷新路径 */
@@ -2342,6 +2467,7 @@ function openSheet(preset) {
   document.body.classList.add('sheet-open');
   sheetOpenedAt = Date.now();
   setTimeout(() => { sheet.scrollTop = 0; }, 50);
+  syncBackState();
 }
 
 function closeSheet() {
@@ -2350,6 +2476,7 @@ function closeSheet() {
   document.body.classList.remove('sheet-open');
   $('#noteInput').blur();
   editingTemplateId = null;
+  syncBackState();
 }
 
 function updateAmountText() {
@@ -4033,11 +4160,28 @@ function showLockOverlay(mode, setupTitle) {
   renderLockDots();
   lockOverlay.hidden = false;
   lockOverlay.classList.remove('lock-shake');
+  syncBackState();
 }
 
 function hideLockOverlay() {
   lockOverlay.hidden = true;
   lockMode = 'verify';
+  syncBackState();
+}
+
+/** 返回键落在锁屏层时的处理（解锁界面见 undoTopLayer：一律拒绝） */
+function cancelLockSetup() {
+  if (!lockOverlay.hidden) {
+    if (lockMode === 'setPinConfirm') {
+      // 等同点「取消」：退回第一步重输，而不是直接关掉整个设置
+      lockPinBuf = ''; lockConfirmBuf = ''; lockMode = 'setPin';
+      $('#lockCancel').hidden = true;
+      $('#lockSub').textContent = lockSetupTitle + '（4-8 位数字）';
+      renderLockDots();
+      return;
+    }
+    hideLockOverlay();
+  }
 }
 
 function shakeLockError(msg) {
