@@ -283,7 +283,11 @@ function renderDelta(curExpense) {
   el.innerHTML = `较上月 <b class="${up ? 'up' : 'down'}">${up ? '+' : ''}${pct.toFixed(1)}%</b>`;
 }
 
-function renderHome() {
+/* silent = true 表示「数据原地变更后的重绘」：不给列表播入场动画。
+   .day-group 的入场是 fadeUp + backwards 填充，重建瞬间整片列表 opacity:0；
+   若此刻屏幕上没有弹层遮罩遮挡（如侧滑删除），就会闪一下整屏。
+   首次进入 / 切月 / 切 tab / 搜索过滤这些「内容确实变了」的场景仍保留动画。 */
+function renderHome(silent) {
   updateMonthLabel();
 
   const [y, m] = viewMonth.split('-').map(Number);
@@ -309,6 +313,7 @@ function renderHome() {
   syncGestureHint(monthTx.length > 0);
 
   const listEl = $('#txList');
+  listEl.classList.toggle('no-anim', !!silent);
 
   if (!monthTx.length) {
     listEl.innerHTML = q
@@ -326,7 +331,7 @@ function renderHome() {
         });
     const cta = listEl.querySelector('#emptyCta');
     if (cta) cta.addEventListener('click', () => openSheet());
-    refreshCatDetailIfOpen(); // 数据变更可能让明细页变空，开着时同步重绘
+    refreshCatDetailIfOpen(silent); // 数据变更可能让明细页变空，开着时同步重绘
     return;
   }
 
@@ -349,7 +354,7 @@ function renderHome() {
     if (dayExpense) sumTxt += '支出 ' + fmtMoney(dayExpense);
     if (dayIncome) sumTxt += (sumTxt ? '  ' : '') + '收入 ' + fmtMoney(dayIncome);
 
-    html += `<div class="day-group" style="animation-delay:${Math.min(idx * 45, 260)}ms">
+    html += `<div class="day-group" data-date="${ds}" style="animation-delay:${Math.min(idx * 45, 260)}ms">
       <div class="day-header"><span>${dayLabel(ds)}</span><span class="sum">${sumTxt}</span></div>
       <div class="card">`;
 
@@ -377,7 +382,7 @@ function renderHome() {
 
   listEl.innerHTML = html;
   listEl.querySelectorAll('.tx-row').forEach(row => bindSwipe(row));
-  refreshCatDetailIfOpen(); // 明细页开着时随数据变更同步重绘
+  refreshCatDetailIfOpen(silent); // 明细页开着时随数据变更同步重绘
 }
 
 function escapeHtml(s) {
@@ -620,14 +625,103 @@ function bindSwipe(row) {
     } catch (e) {
       toast('删除失败：' + e);
     }
+    // 280ms 早于行收起动画（opacity .25s / height .3s）结束，重建时行高还差一截会跳一下
     setTimeout(async () => {
       await refreshTxs();
-      renderHome();
-      renderStats();
+      // 优先「原地修补」：只摘掉这一行、改所在天的合计与顶部汇总，不重建列表 DOM。
+      // 整表 innerHTML 重建会让 Android WebView 在换帧时掉一帧，表现为整片列表闪一下 ——
+      // 抑制入场动画（no-anim）只能消掉其中「动画重播」的那部分，剩这一部分盖不住。
+      // 修补不成（多选态 / 搜索过滤 / 行不在列表里 / 删空要出空态）才退回静默重绘。
+      if (patchAfterDelete(id)) {
+        const onDetail = $('#page-catdetail').classList.contains('active');
+        // 财报页此刻不可见，重绘它不会闪；分类明细页开着时不重绘（会闪），回去时 switchTab 会自动重渲染
+        if (!onDetail) renderStats(true);
+      } else {
+        renderHome(true);
+        renderStats(true);
+      }
       updateRecordCount();
       toast('已删除');
-    }, 280);
+    }, 320);
   });
+}
+
+/* 侧滑删除后的「原地修补」：只摘掉那一行、更新所在天的合计与顶部汇总，不重建列表 DOM。
+   拿不到可修补的锚点或需要出空态时返回 false，由调用方退回静默重绘。 */
+function patchAfterDelete(id) {
+  id = String(id);
+  if (selectMode || searchQuery.trim()) return false;
+
+  const detailPage = $('#page-catdetail');
+  const onCatDetail = !!(detailPage && detailPage.classList.contains('active') && curCatId);
+  const isExpense = curCatType !== 'income';
+
+  // 先按数据判断能不能原地修补，避免先改 DOM 再回退
+  const monthTx = txs.filter(t => t.date.startsWith(viewMonth));
+  if (!monthTx.length) return false;                 // 首页本月已空 → 交给重绘出空态
+  let catItems = null;
+  if (onCatDetail) {
+    const range = getPeriodRange(curPeriod);
+    catItems = txs.filter(t =>
+      t.type === (isExpense ? 'expense' : 'income') &&
+      t.category === curCatId && t.date >= range.start && t.date <= range.end);
+    if (!catItems.length) return false;              // 明细页该周期已空 → 交给重绘出空态
+  }
+
+  // 明细页开着时首页 DOM 还在，且切 tab 不会重绘首页，所以两边都要摘干净；
+  // 反之明细页列表每次打开都重建，它没显示时不必去动（也拿不到分类口径）。
+  let hit = false;
+  if (removeRowFromList('#txList', id, null)) hit = true;
+  if (onCatDetail && removeRowFromList('#catDetailList', id, catItems)) hit = true;
+  if (!hit) return false;
+
+  // 顶部汇总 / 环比 / 预算：只改数字
+  const exp = monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const inc = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  setNumber($('#monthExpense'), exp);
+  setNumber($('#monthIncome'), inc);
+  setNumber($('#monthBalance'), inc - exp);
+  renderDelta(exp);
+  renderBudget();
+  syncGestureHint(monthTx.length > 0);
+
+  if (catItems) {
+    const total = catItems.reduce((s, t) => s + t.amount, 0);
+    $('#cdTotal').textContent = fmtNum(total);
+    $('#cdAvg').textContent = fmtNum(total / catItems.length);
+    $('#cdCount').textContent = catItems.length + ' 笔';
+  }
+  return true;
+}
+
+/** 从某个列表里摘掉一行：该天没别的记录了就连整组摘掉，否则重算「支出 / 收入」合计。
+    daySource 传「单方向、单分类」的数据时（分类明细页）按单方向口径显示。 */
+function removeRowFromList(listSel, id, daySource) {
+  const listEl = $(listSel);
+  const row = listEl && listEl.querySelector('.tx-row[data-id="' + id + '"]');
+  if (!row) return false;
+
+  const group = row.closest('.day-group');
+  const date = group.dataset.date;
+  const oneWay = !!daySource;
+  const isExpense = curCatType !== 'income';
+  if (openedRow === row) openedRow = null;
+  row.remove();
+
+  if (!group.querySelector('.tx-row')) { group.remove(); return true; }
+
+  const day = (daySource || txs).filter(t => t.date === date);
+  const exp = day.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const inc = day.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  let txt = '';
+  if (oneWay) {
+    txt = (isExpense ? '支出 ' : '收入 ') + fmtMoney(exp + inc);
+  } else {
+    if (exp) txt += '支出 ' + fmtMoney(exp);
+    if (inc) txt += (txt ? '  ' : '') + '收入 ' + fmtMoney(inc);
+  }
+  group.querySelector('.day-header .sum').textContent = txt;
+  return true;
 }
 
 /* ================= 批量选择分类 ================= */
@@ -651,13 +745,13 @@ function enterSelect(initialId) {
   syncBackState();
 }
 
-function exitSelect() {
+function exitSelect(silent) {
   if (!selectMode) return;
   selectMode = false;
   selectedIds.clear();
   $('#app').classList.remove('select-mode');
   $('#selectBar').classList.remove('show');
-  renderHome();
+  renderHome(silent);
   syncBackState();
 }
 
@@ -721,8 +815,8 @@ async function applyBatchCat(catId) {
   try {
     const changed = await invoke('update_category_batch', { ids, category: catId });
     await refreshTxs();
-    if (selectMode) exitSelect(); else renderHome();
-    renderStats();
+    if (selectMode) exitSelect(true); else renderHome(true);
+    renderStats(true);
     updateRecordCount();
     toast(`已更新 ${changed} 条`);
   } catch (e) {
@@ -993,8 +1087,8 @@ $('#catEditSave').addEventListener('click', async () => {
     await loadCategories();
     renderCatManage();
     openModal(catManageSheet);
-    if ($('.page.active') && $('.page.active').id === 'page-home') { renderHome(); }
-    renderStats();
+    if ($('.page.active') && $('.page.active').id === 'page-home') { renderHome(true); }
+    renderStats(true);
   } catch (err) {
     toast('保存失败：' + err);
   }
@@ -1027,8 +1121,8 @@ $('#catEditDelete').addEventListener('click', async () => {
   await loadCategories();
   renderCatManage();
   openModal(catManageSheet);
-  if ($('.page.active') && $('.page.active').id === 'page-home') { renderHome(); }
-  renderStats();
+  if ($('.page.active') && $('.page.active').id === 'page-home') { renderHome(true); }
+  renderStats(true);
 });
 
 /* ================= 快捷记账模板 ================= */
@@ -1158,8 +1252,8 @@ async function quickRecord(id) {
     const ym = todayStr().slice(0, 7);
     if (ym !== viewMonth && !searchQuery) viewMonth = ym;
     await loadBudget();   // 切月后必须重载预算，否则沿用上一月的额度
-    renderHome();
-    renderStats();
+    renderHome(true);
+    renderStats(true);
     updateRecordCount();
     const fresh = $(`#quickRow .quick-chip[data-id="${t.id}"]`);
     if (fresh) {
@@ -1632,8 +1726,8 @@ $('#editAmountSave').addEventListener('click', async () => {
   try {
     await invoke('update_amount', { id: String(targetTxId), amount: editAmountStr });
     await refreshTxs();
-    renderHome();
-    renderStats();
+    renderHome(true);
+    renderStats(true);
     toast('金额已修改');
   } catch (e) {
     toast('修改失败：' + e);
@@ -1704,8 +1798,8 @@ $('#editDateSave').addEventListener('click', async () => {
     await refreshTxs();
     const newYM = editDateStr.slice(0, 7);
     if (newYM !== viewMonth) { viewMonth = newYM; await loadBudget(); }
-    renderHome();
-    renderStats();
+    renderHome(true);
+    renderStats(true);
     toast('时间已修改');
   } catch (e) {
     toast('修改失败：' + e);
@@ -1731,8 +1825,8 @@ $('#editNoteSave').addEventListener('click', async () => {
   try {
     await invoke('update_note', { id: String(targetTxId), note: $('#editNoteInput').value.trim() });
     await refreshTxs();
-    renderHome();
-    if ($('#page-stats').classList.contains('active')) renderStats();
+    renderHome(true);
+    if ($('#page-stats').classList.contains('active')) renderStats(true);
     toast('备注已修改');
   } catch (e) {
     toast('修改失败：' + e);
@@ -1751,8 +1845,8 @@ $('#confirmDeleteBtn').addEventListener('click', async () => {
     await invoke('delete_tx', { id: String(targetTxId) });
     await refreshTxs();
     closeModal();
-    renderHome();
-    renderStats();
+    renderHome(true);
+    renderStats(true);
     updateRecordCount();
     toast('已删除');
   } catch (e) {
@@ -2069,7 +2163,8 @@ function getPeriodRange(period) {
   return { start: fmtDate(start), end: fmtDate(end), label: periodLabel(period, ref) };
 }
 
-function renderStats() {
+function renderStats(silent) {
+  $('#catList').classList.toggle('no-anim', !!silent);
   const range = getPeriodRange(curPeriod);
   const periodTx = txs.filter(t => t.date >= range.start && t.date <= range.end);
 
@@ -2117,7 +2212,7 @@ function renderStats() {
       icon: IC('<circle cx="12" cy="12" r="8.2"/><path d="M12 12l3-3"/>'),
       title: '该周期还没有' + (isExpenseChart ? '支出' : '收入'),
     });
-    refreshCatDetailIfOpen(); // 数据变更可能让明细页变空，开着时同步重绘
+    refreshCatDetailIfOpen(silent); // 数据变更可能让明细页变空，开着时同步重绘
     return;
   }
 
@@ -2163,7 +2258,7 @@ function renderStats() {
       el.style.width = Math.max(parseFloat(el.dataset.w), 1.5) + '%';
     });
   });
-  refreshCatDetailIfOpen(); // 明细页开着时随数据变更同步重绘
+  refreshCatDetailIfOpen(silent); // 明细页开着时随数据变更同步重绘
 }
 
 /* 「近 6 个月趋势」：以财报页当前范围为锚点，展示前 5 个月 + 当前月 */
@@ -2347,12 +2442,12 @@ function closeCatDetail() {
 }
 
 /** 数据变更后若明细页开着则重绘；由 renderHome / renderStats 末尾调用兜住全部刷新路径 */
-function refreshCatDetailIfOpen() {
+function refreshCatDetailIfOpen(silent) {
   const page = $('#page-catdetail');
-  if (page && page.classList.contains('active') && curCatId) renderCatDetail(curCatId, curCatType);
+  if (page && page.classList.contains('active') && curCatId) renderCatDetail(curCatId, curCatType, silent);
 }
 
-function renderCatDetail(catId, type) {
+function renderCatDetail(catId, type, silent) {
   const range = getPeriodRange(curPeriod);
   const isExpense = type !== 'income';
   const cat = CAT_MAP[catId] || DEFAULT_CAT || { name: '其他', color: '#8E8E93', icon: '' };
@@ -2372,6 +2467,7 @@ function renderCatDetail(catId, type) {
   $('#cdCount').textContent = items.length + ' 笔';
 
   const listEl = $('#catDetailList');
+  listEl.classList.toggle('no-anim', !!silent);
   if (!items.length) {
     listEl.innerHTML = emptyState({
       variant: 'compact',
@@ -2390,7 +2486,7 @@ function renderCatDetail(catId, type) {
   dates.forEach((ds, idx) => {
     const gItems = groups[ds];
     const daySum = gItems.reduce((s, t) => s + t.amount, 0);
-    html += `<div class="day-group" style="animation-delay:${Math.min(idx * 45, 260)}ms">
+    html += `<div class="day-group" data-date="${ds}" style="animation-delay:${Math.min(idx * 45, 260)}ms">
       <div class="day-header"><span>${dayLabel(ds)}</span><span class="sum">${isExpense ? '支出' : '收入'} ${fmtMoney(daySum)}</span></div>
       <div class="card">`;
     gItems.forEach(t => {
@@ -2676,8 +2772,8 @@ async function saveTx() {
       await refreshTxs();
       closeSheet();
       if (savedYM !== viewMonth && !searchQuery) { viewMonth = savedYM; await loadBudget(); }
-      renderHome();
-      if ($('#page-stats').classList.contains('active')) renderStats();
+      renderHome(true);
+      if ($('#page-stats').classList.contains('active')) renderStats(true);
       updateRecordCount();
       const spent = todayExpense();
       let msg = curType === 'income'
@@ -2834,8 +2930,8 @@ async function importBackup() {
     await loadBudget();
     await loadTemplates();
     await loadCategories();   // 备份里带了分类，必须重新灌一次内存缓存，否则记录全显示成「其他」
-    renderHome();
-    renderStats();
+    renderHome(true);
+    renderStats(true);
     updateRecordCount();
     renderBudgetSettingRow();
     toast(`导入成功，共 ${count} 条记录`);
@@ -2894,8 +2990,8 @@ async function clearAll() {
   try {
     await invoke('clear_all_tx');
     await refreshTxs();
-    renderHome();
-    renderStats();
+    renderHome(true);
+    renderStats(true);
     updateRecordCount();
     toast('已清空所有记录');
   } catch (e) {
@@ -3348,8 +3444,8 @@ async function importBill() {
     }
 
     await refreshTxs();
-    renderHome();
-    renderStats();
+    renderHome(true);
+    renderStats(true);
     updateRecordCount();
     toast(failed
       ? `导入完成：成功 ${done} 条，失败 ${failed} 条`
@@ -4353,13 +4449,13 @@ setInterval(() => {
   if (document.hidden) return;
   if (todayStr() === lastRenderedDay) return;
   lastRenderedDay = todayStr();
-  renderHome();
-  if ($('#page-stats').classList.contains('active')) renderStats();
+  renderHome(true);   // 跨天只刷新「今日 / 昨日」文案，属原地重绘
+  if ($('#page-stats').classList.contains('active')) renderStats(true);
 }, 60000);
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    renderHome();
-    if ($('#page-stats').classList.contains('active')) renderStats();
+    renderHome(true);   // 回到前台只是原地重绘，不重播入场动画
+    if ($('#page-stats').classList.contains('active')) renderStats(true);
   }
 });

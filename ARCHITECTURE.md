@@ -1,6 +1,6 @@
 # Ledger 架构文档
 
-> **语言**：[English](./ARCHITECTURE.en.md) ｜ **基线版本**：v1.5.0（commit `1b74e84`）｜ **最后核对**：2026-10-20
+> **语言**：[English](./ARCHITECTURE.en.md) ｜ **基线版本**：v1.5.5（commit 待提交后回填）｜ **最后核对**：2026-10-20
 
 **一句话定位**：Ledger 是一个离线优先（offline-first）的个人记账本 —— Tauri v2 + Rust + SQLite 单机内核，前端零框架、零打包器、零构建步骤。
 
@@ -8,7 +8,7 @@
 |---|---|
 | 读者对象 | 想读代码的 GitHub 访客、准备接手或二次开发的开发者、需要核对实现细节的使用者 |
 | 与 README 的关系 | [README.md](./README.md) 回答「这是什么 / 怎么用 / 有哪些功能」；本文回答「系统怎么搭起来的 / 关键决策为什么这么定 / 能力边界止于何处」。功能清单与安装步骤不在本文重复 |
-| 数据来源 | 全文所有数字均自 v1.5.0 源码实测（2026-10-20）。README 中已过期的数值（行数、"0 npm 依赖"等）以本文为准，详见 [§8 关键设计决策](#8-关键设计决策与取舍) 与 [§11 构建--测试--发布](#11-构建--测试--发布) |
+| 数据来源 | 全文所有数字均自 v1.5.5 源码实测（2026-10-20）。README 中已过期的数值（行数、"0 npm 依赖"等）以本文为准，详见 [§8 关键设计决策](#8-关键设计决策与取舍) 与 [§11 构建--测试--发布](#11-构建--测试--发布) |
 
 ---
 
@@ -92,8 +92,8 @@ flowchart TB
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `src/index.html` | 773 | 全部页面结构：明细页 / 财报页 / 分类明细页 / 设置页，以及记账面板、日历、动作弹层、锁屏层、批量操作栏 |
-| `src/main.js` | 4221 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题 |
-| `src/styles.css` | 2461 | 全部样式：主题变量、组件、动效 |
+| `src/main.js` | 4461 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题、返回栈 |
+| `src/styles.css` | 2470 | 全部样式：主题变量、组件、动效 |
 | `src/vendor/xlsx.full.min.js` | 951,904 B（约 929.6 KB） | SheetJS 0.20.3，随包分发（离线 + 规避 CVE），仅 Excel 导入路径按需加载 |
 | `src/vendor/README.md` | — | 该 vendor 文件的来源、哈希、升级步骤 |
 
@@ -109,6 +109,7 @@ flowchart TB
 | AI 面板 | 月度分析生成、缓存读写、隐私授权、Key 配置入口 |
 | 设置页 | 预算、主题、应用锁、分类管理、导出/导入/清空 |
 | 锁屏 | PIN 输入、解锁、设置/关闭流程 |
+| 返回栈 | `uiLayers()` / `syncBackState()` / `popstate`：把当前 UI 层级同步进 WebView 历史，Android 返回手势逐层回退（[§14.4](#144-返回键--侧滑返回栈)） |
 | 启动 | `boot()`：主题 → 锁 → 分类 → 规则 → 流水 → 月度预算；打开应用时的超支提醒 |
 
 ### 2.2 后端（8 个模块，共 2881 行）
@@ -435,6 +436,8 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | Key 三档存储而非强制钥匙串 | 桌面有系统凭据管理器，移动端没有；强制单一方案会在某一平台直接不可用 | 只存数据库：桌面端白白降低安全性；只存内存：每次启动都要重填 |
 | 无 schema 版本号，只做 `CREATE TABLE IF NOT EXISTS` | 项目处于单文件单机形态，新增能力一律「新增整张表」，从不需要改列 | 迁移框架（如 refinery）：为当前不存在的需求引入依赖 |
 | 删除分类时把记录转到兜底分类 | 不产生孤儿记录；统计不会因分类消失而丢金额 | 级联删除记录：用户会丢数据 |
+| Android 返回键 / 侧滑返回靠「前端造历史 + 打开 `handleBackNavigation`」两条腿同时成立 | Tauri 模板把 `handleBackNavigation` 覆写为 `false`，Activity 不注册任何后退回调（`generated/WryActivity.kt#L58-L79`）；而前端是无路由 SPA、从未 `pushState`，WebView 历史恒为 1 条。此时返回手势无人拦截，直接走 Activity 默认后退 `finish()` 掉自己 → 表现为「侧滑直接退出应用」。缺任一条都不生效：只打开关而没造历史，`canGoBack()` 恒为假；只造历史而不打开关，手势根本到不了 WebView | 在原生 `OnBackPressedCallback` 里手写层级判断：等价逻辑，但要跨 Kt / JS 两处维护同一份层级表；引入路由库（vue-router 类）：为单窗口账本带来整套 SPA 框架负担 |
+| 数据原地变更后的重绘不带入场动画（容器加 `no-anim`） | `.day-group` / `.cat-row` / `.empty-state` 的入场是 `fadeUp` + `backwards` 填充，容器一旦 `innerHTML` 重建就会重播，而 `backwards` 让整片内容在重建瞬间处于 `opacity: 0`。删除一条流水时列表只少一行、其余内容没变，整片淡入就变成「屏闪」；弹层内的删除 / 改金额路径长期没暴露，只是因为 `.modal-mask` 的 350ms 淡出正好盖住了重绘 | 只在「内容确实变了」的新视图路径播动画（首次进入 / 切月 / 切 tab / 搜索过滤）；数据原地变更路径（删除、改金额/日期/备注、批量改分类、常用项记账、分类增删改、导入 / 清空、跨天定时重绘、回到前台）走静默重绘 | 直接删掉全局入场动画：失去新视图的层次感；改成整表 diff 更新：改动面远大于收益 |
 
 ---
 
@@ -462,7 +465,7 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | 损坏数据库 | 打开失败直接返回错误，**不自动回退空库**（`lib.rs#L521-L522`）；用户需靠备份恢复 |
 | PIN 爆破防护 | 无尝试次数限制与延时 |
 | 导入范围 | 不含设置项；缺列的新旧备份不兼容 |
-| 前端规模 | 单文件 `main.js` 4221 行，无模块拆分；靠分区注释维持可读性 |
+| 前端规模 | 单文件 `main.js` 4461 行，无模块拆分；靠分区注释维持可读性 |
 | 查询规模 | 全量加载 + 前端过滤；未做分页/虚拟列表，超大账本（万条以上）未做性能验证 |
 
 **与早期课程文档的差异说明**：项目早期文档集（`ledger document/`，从未纳入版本控制）中的若干描述已与现状不符，本文不沿用。典型三处：① 其 UI 规范写的是 iOS 系统色（`#F2F2F7` / `#007AFF` / 24px 圆角），现行主题是暖中性纸感 + 暗靛，实测值见 §13；② 其数据库文档只描述 1 张表，实际为 5 张（§4）；③ 其测试计划中的「改日期为 400 天前一律拒绝」与现状相反（现状允许**未修改日期**的原样保存）、「数据文件损坏回退空账」在代码中并未实现。
@@ -475,8 +478,8 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 ledger/
 ├── src/                          前端（原生 HTML/CSS/JS，无构建）
 │   ├── index.html                773 行 · 全部页面结构
-│   ├── styles.css                2461 行 · 主题变量与全部样式
-│   ├── main.js                   4221 行 · 全部逻辑（ES Module）
+│   ├── styles.css                2470 行 · 主题变量与全部样式
+│   ├── main.js                   4461 行 · 全部逻辑（ES Module）
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3，随包分发（951,904 B）
 │       └── README.md             来源 / SHA-256 / 升级步骤
@@ -493,6 +496,8 @@ ledger/
 │   ├── capabilities/default.json 权限声明（仅 main 窗口）
 │   ├── icons/                    应用图标
 │   ├── gen/android/              Android Gradle 工程（已入库，编译产物不入库）
+│   │   └── app/src/main/java/com/tauri_app/ledger/MainActivity.kt
+│   │                             唯一手写 Kotlin：覆写 handleBackNavigation = true（§14.4）
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           窗口、CSP、打包配置
 ├── docs/                         截图（detail.png / account.png / stats.png）
@@ -733,6 +738,42 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | `viewMonth` | 切月必须 `loadBudget()`；预算与月份强绑定，不做跨月自动沿用 |
 | 锁屏 `hidden` | 层默认 `display:none`，JS 移除 `hidden` 才显示；切后台自动回到验证态 |
 | 搜索 / 多选态 | 隐藏常用项胶囊行与预算展示行（首页「较上月环比」行在搜索态同样隐藏，避免与跨月过滤结果对不上），退出后恢复 |
+| 返回栈 `syncedLayers` / `sentinelCount` | 必须与实时 UI 层级一一对应；同一轮内的多次界面变化用 `queueMicrotask` 合并为一次历史操作，避免层数漂移（§14.4） |
+| 静默重绘 `renderHome(silent)` / `renderStats(silent)` / `renderCatDetail(…, silent)` | 数据**原地变更**（删除 / 改金额 / 改备注 / 批量改分类 / 导入等）后的重建传 `silent = true`，给容器（`#txList` / `#catList` / `#catDetailList`）加 `no-anim`，抑制 `.day-group` / `.cat-row` / `.empty-state` 的入场动画；「内容确实变了」的新视图路径（首次进入 / 切月 / 切 tab / 搜索过滤）仍保留动画 |
+| 原地修补 `patchAfterDelete()` | 侧滑删除**不重建列表 DOM**：只摘掉被删那一行，按 `.day-group` 上的 `data-date` 重算该天合计（该天无记录则整组摘掉），再原地改顶部汇总 / 环比 / 预算。整表 `innerHTML` 重建会让 Android WebView 换帧时掉一帧、表现为整片列表闪一下，抑制入场动画盖不住这部分。多选态 / 搜索过滤 / 行不在列表 / 删空要出空态时才退回静默重绘；明细页开着时首页列表一并摘行（切 tab 不重绘首页） |
+
+### 14.4 返回键 / 侧滑返回栈
+
+**问题**：前端页面与弹层全靠切 class 实现，从未 `pushState`，WebView 历史只有 1 条；Android 返回手势因此无人拦截，直接走 Activity 默认后退 `finish()` 掉自己。修复需要两条腿同时成立（见 [§8](#8-关键设计决策与取舍)）：前端把 UI 层级写进历史，Android 侧打开 `handleBackNavigation`（`src-tauri/gen/android/app/src/main/java/com/tauri_app/ledger/MainActivity.kt`）。
+
+**层级定义**：`uiLayers()` 由实时 DOM 派生，自底向上排列，即返回键的剥离顺序 —— `stats` / `catdetail` / `settings` → `ai` → `search` → `select` → `sheet` → `modal` → `lock`。分类明细页恒视为「财报页 + 明细页」两层（入口在财报页）。
+
+**同步规则**（`commitBackState`）：
+
+| 变化 | 动作 |
+|---|---|
+| 层数变多 | `history.pushState({ layers })`，支起一条哨兵，`sentinelCount++` |
+| 层数不变、内容变（如动作弹层 → 多选态） | `history.replaceState({ layers })` |
+| 层数变少 | 记下待收哨兵数，`setTimeout(0)` 后静默 `history.back()` 一次性收掉 |
+
+同一轮（microtask 内）的多次界面变化合并成一次历史操作。否则「关一个弹层又开一个」会先排入物理回退、再 push 新层，导致层数漂移。
+
+**手势回退**（`popstate`）：一次手势只剥一层 —— 与目标层级对比后由 `undoTopLayer()` 关掉最外层：
+
+| 最外层 | 动作 |
+|---|---|
+| `lock` | 解锁态（`verify`）**一律拒绝**（否则等于绕过密码）；设置密码流程中退回上一步 |
+| `modal` | `closeModal()` |
+| `sheet` | `closeSheet()` |
+| `select` | `exitSelect()` |
+| `search` | `closeSearch()` |
+| `ai` | `setStatsView('chart')`（留在财报页） |
+| `catdetail` | `closeCatDetail()`（退回财报页） |
+| `stats` / `settings` | `switchTab('home')` |
+
+程序性回退（UI 路径关闭）与手势回退用 `backSuppress` 计数区分，前者不得触发剥层。若物理哨兵数少于实时 UI 层数（拒绝退出的解锁界面、PIN 两步退回同一步），回退后补齐哨兵。剥到最底层（`canGoBack()` 为假）再按，才交给系统默认行为退出应用。
+
+**取舍**：`uiLayers()` 只认「当前可见 UI」，因此「开搜索后切 tab」这类极端路径不保留幽灵层 —— 属可接受的降级，且下一次同步会自动修正。
 
 ---
 
@@ -790,6 +831,8 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | U-13 | AI 分析 | 未配置 Key 时给出中文提示；配置后可生成并缓存；清除只删分析缓存；两种主题下文案与排版一致 |
 | U-14 | 主题 | 跟随系统 / 显式深色 / 显式浅色三态切换，刷新后保持 |
 | U-15 | 较上月环比 / 超支提醒 | 本月支出下方显示涨跌百分比（涨红降绿，差值 <0.05% 显示「持平」）；上月无支出或搜索态整行隐藏；打开应用时若本月已超支居中提醒一次；记账恰好把本月推成超支时在成功提示后追加超支金额 |
+| U-16 | Android 返回手势 / 返回键 | 逐层回退：先关弹层 →（弹层内二级面板）→ 退 AI 视图 → 退分类明细页 → 退非首页 tab → 首页；剥到最底层再按才退出应用；UI 路径关闭后不多占一次返回；解锁界面下返回键**无效**；设置密码第二步按返回退回第一步（§14.4） |
+| U-17 | 原地变更后列表不闪 | 侧滑删除 / 弹层内改金额 / 改日期 / 改备注 / 删除 / 批量改分类 / 导入 / 清空后，列表**整体重建但不重播入场动画**（不出现整片淡出再淡入的屏闪）；侧滑删除更进一步走**原地修补**、不重建整表 DOM；首次进入、切月、切 tab、搜索过滤这些「内容确实变了」的场景仍正常播放入场动画（§14.3） |
 
 > 与早期课程文档的差异：其测试计划的 T-07 已按现状改写（改成另一个超窗日期仍拒绝，但**原样保存**超窗日期放行，见 §5.1）；T-14「数据文件损坏自动回退空账」在实现中并不存在（见 §9），故剔除、不列为验收项。
 
@@ -819,4 +862,4 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 
 ---
 
-**维护**：SolitaryStarCircling（项目作者）· 本文档对应基线 v1.5.0（commit `1b74e84`），代码变更后请同步修订本节所列的行号与实测数字。
+**维护**：SolitaryStarCircling（项目作者）· 本文档对应基线 v1.5.5（commit 待提交后回填），代码变更后请同步修订本节所列的行号与实测数字。

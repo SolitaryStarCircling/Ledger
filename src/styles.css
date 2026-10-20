@@ -370,6 +370,15 @@ html, body {
 
 /* ============ 列表 ============ */
 .day-group { margin-bottom: 22px; animation: fadeUp .45s cubic-bezier(.2,.8,.2,1) backwards; }
+
+/* 静默重绘：数据原地变更（删除 / 改金额 / 改备注 / 批量改分类 / 导入等）后重建列表时，
+   不给 .day-group / .cat-row / .empty-state 播入场动画。
+   这些入场都依赖 backwards 填充，重建瞬间整片内容 opacity:0；
+   若此刻屏幕上没有弹层遮罩遮挡（典型：侧滑删除），就会闪一下整屏。
+   容器上的 no-anim 由 renderHome / renderStats / renderCatDetail 的 silent 参数控制。 */
+.no-anim .day-group,
+.no-anim .cat-row,
+.no-anim .empty-state { animation: none; }
 .day-header {
   display: flex;
   justify-content: space-between;

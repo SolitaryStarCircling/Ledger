@@ -62,6 +62,7 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 **其他**
 
 - 浅色 / 深色主题切换，默认跟随系统
+- Android 返回手势 / 返回键逐层回退：先关弹层 → 退二级面板 → 退分类明细页 / AI 视图 → 退非首页 tab → 首页，剥到最底层再按才退出应用（解锁界面下返回键无效）
 - 数据导出：Excel (`.xlsx`) / CSV (`.csv`) / SQLite (`.sqlite`) 备份
 - 数据导入：Excel / CSV 账单、SQLite 恢复（覆盖当前）
 
@@ -74,7 +75,7 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 | 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
 | 后端 | Rust (edition 2021) | — | 8 个模块，注册 **36 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
-| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4221 行、`styles.css` 2461 行、`index.html` 773 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
+| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4461 行、`styles.css` 2470 行、`index.html` 773 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
 | 密码哈希 | argon2（Argon2id，纯 Rust） | 0.5 | 应用锁 PIN 哈希，无 C 依赖 |

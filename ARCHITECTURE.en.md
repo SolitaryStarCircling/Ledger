@@ -1,6 +1,6 @@
 # Ledger Architecture
 
-> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.5.0 (commit `1b74e84`) ｜ **Last verified**: 2026-10-20
+> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.5.5 (commit to be back-filled after the commit) ｜ **Last verified**: 2026-10-20
 
 **One line**: Ledger is an offline-first personal expense tracker — a Tauri v2 + Rust + SQLite single-machine core with a front end that has no framework, no bundler and no build step.
 
@@ -8,7 +8,7 @@
 |---|---|
 | Audience | GitHub visitors reading the code, developers taking over or extending it, users verifying implementation details |
 | Relationship to README | [README.md](./README.md) answers "what is this / how do I use it / what features exist"; this document answers "how the system is put together / why the key decisions were made that way / where the capability boundary sits". Feature lists and installation steps are not repeated here |
-| Data source | Every number below was measured from the v1.5.0 source (2026-10-20). Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
+| Data source | Every number below was measured from the v1.5.5 source (2026-10-20). Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
 
 ---
 
@@ -92,8 +92,8 @@ flowchart TB
 | File | Lines | Responsibility |
 |---|---:|---|
 | `src/index.html` | 773 | All page structure: home / stats / category detail / settings, plus the entry sheet, calendar, action sheets, lock overlay and batch-action bar |
-| `src/main.js` | 4221 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme |
-| `src/styles.css` | 2461 | All styling: theme variables, components, motion |
+| `src/main.js` | 4461 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack |
+| `src/styles.css` | 2470 | All styling: theme variables, components, motion |
 | `src/vendor/xlsx.full.min.js` | 951,904 B (≈ 929.6 KB) | SheetJS 0.20.3, shipped in-repo (offline + CVE avoidance), lazily loaded only on the Excel import path |
 | `src/vendor/README.md` | — | Origin, hash and upgrade steps for the vendored file |
 
@@ -109,6 +109,7 @@ Sections inside `main.js` (following the section comments in the file):
 | AI panel | Monthly analysis generation, cache read/write, privacy consent, key configuration entry |
 | Settings | Budget, theme, app lock, category management, export/import/clear |
 | Lock screen | PIN entry, unlock, set/disable flows |
+| Back stack | `uiLayers()` / `syncBackState()` / `popstate`: mirrors the current UI hierarchy into WebView history so the Android back gesture unwinds it layer by layer ([§14.4](#144-back-key--swipe-back-stack)) |
 | Boot | `boot()`: theme → lock → categories → rules → transactions → monthly budget; the over-budget reminder on launch |
 
 ### 2.2 Backend (8 modules, 2881 lines total)
@@ -435,6 +436,8 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 | Three key-storage tiers rather than keychain-only | Desktops have an OS credential manager, mobile does not; forcing one scheme makes one platform unusable | Database only: needlessly weakens security on desktop; memory only: retype the key every launch |
 | No schema version, only `CREATE TABLE IF NOT EXISTS` | The project is single-file and single-device; every added capability has been "a new whole table", never an altered column | A migration framework (e.g. refinery): a dependency for a need that does not exist |
 | Records move to the fallback category when one is deleted | No orphaned records; statistics never lose amounts because a category disappeared | Cascading record deletion: users would lose data |
+| The Android back key / swipe-back needs **both** "a front end that builds history" and "`handleBackNavigation` turned on" | The Tauri template overrides `handleBackNavigation` to `false`, so the Activity registers no back callback at all (`generated/WryActivity.kt#L58-L79`); and the front end is a router-less SPA that never called `pushState`, so WebView history is always one entry. The back gesture therefore has no interceptor and falls straight through to the Activity default of `finish()`-ing itself — the "swipe back quits the app" symptom. Neither half works alone: with the flag on but no history, `canGoBack()` is always false; with history built but the flag off, the gesture never reaches the WebView | Hand-writing the layer logic in a native `OnBackPressedCallback`: equivalent, but the same hierarchy table would be maintained in both Kt and JS; pulling in a router library (vue-router style): a whole SPA framework for a single-window ledger |
+| A re-render after an in-place data change carries no entry animation (the container gets `no-anim`) | The entry of `.day-group` / `.cat-row` / `.empty-state` is `fadeUp` with `backwards` fill, so it replays whenever the container's `innerHTML` is rebuilt — and `backwards` puts the whole block at `opacity: 0` for the instant of the rebuild. Deleting one transaction removes a single row while the rest is unchanged, so the full-block fade reads as a screen flash; the delete / edit-amount paths inside overlays stayed invisible only because the `.modal-mask`'s 350 ms fade-out happened to cover the rebuild | Animate only on "content genuinely changed" view paths (first entry / month switch / tab switch / search filtering); use a silent re-render for in-place mutation paths (delete, edit amount/date/note, batch category change, quick-template recording, category add/edit/delete, import / clear, the midnight redraw, returning to the foreground) | Removing entry animation entirely: loses the depth cue for new views; switching to a full table diff update: far more surface than payoff |
 
 ---
 
@@ -462,7 +465,7 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 | Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L521-L522`); recovery relies on backups |
 | PIN brute-force resistance | No attempt limit and no delay |
 | Import scope | Excludes settings; backups missing newer tables are incompatible |
-| Front-end size | A single 4221-line `main.js` with no module split; readability relies on section comments |
+| Front-end size | A single 4461-line `main.js` with no module split; readability relies on section comments |
 | Query scale | Full load plus front-end filtering; no pagination or virtual list, and very large ledgers (10k+ rows) have not been performance-verified |
 
 **Divergence from the early course documents**: several descriptions in the project's early document set (`ledger document/`, never under version control) no longer match reality and are not carried over here. Three typical cases: (1) its UI spec describes iOS system colours (`#F2F2F7` / `#007AFF` / 24 px corners) while the current theme is a warm neutral paper feel with dark indigo accents, measured in §13; (2) its database document describes a single table while there are five (§4); (3) its test plan claims "editing the date to 400 days ago is always rejected" (now the opposite: re-saving an **unchanged** date is allowed) and "a corrupted data file falls back to an empty ledger", which is not implemented in code.
@@ -475,8 +478,8 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 ledger/
 ├── src/                          Front end (plain HTML/CSS/JS, no build)
 │   ├── index.html                773 lines · all page structure
-│   ├── styles.css                2461 lines · theme variables and all styling
-│   ├── main.js                   4221 lines · all logic (ES module)
+│   ├── styles.css                2470 lines · theme variables and all styling
+│   ├── main.js                   4461 lines · all logic (ES module)
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3, shipped in-repo (951,904 B)
 │       └── README.md             origin / SHA-256 / upgrade steps
@@ -492,7 +495,9 @@ ledger/
 │   │   └── ai.rs                 757 lines · AI client
 │   ├── capabilities/default.json permission declarations (main window only)
 │   ├── icons/                    app icons
-│   ├── gen/android/              Android Gradle project (committed; build output is not)
+│   ├── gen/android/              Android Gradle project (committed; build outputs are not)
+│   │   └── app/src/main/java/com/tauri_app/ledger/MainActivity.kt
+│   │                             the only hand-written Kotlin: overrides handleBackNavigation = true (§14.4)
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           window, CSP and bundling config
 ├── docs/                         screenshots (detail.png / account.png / stats.png)
@@ -733,6 +738,42 @@ Category detail page · Settings page · Lock overlay
 | `viewMonth` | Switching months must call `loadBudget()`; the budget is bound to the month and never carried over silently |
 | Lock `hidden` | The overlay defaults to `display:none` and appears only when JS removes `hidden`; going to the background returns it to the verify state |
 | Search / multi-select | Hides the quick-template row and the budget strip, restoring them on exit (the home-page month-over-month delta row is also hidden while searching, so it never contradicts a cross-month filtered figure) |
+| Back stack `syncedLayers` / `sentinelCount` | Must stay in one-to-one correspondence with the live UI layers; several UI changes within the same turn are merged into a single history operation by `queueMicrotask`, so the layer count cannot drift (§14.4) |
+| Silent repaint `renderHome(silent)` / `renderStats(silent)` / `renderCatDetail(…, silent)` | Rebuilds that follow an **in-place data change** (delete / edit amount / edit note / batch re-categorise / import …) pass `silent = true`, adding `no-anim` to the container (`#txList` / `#catList` / `#catDetailList`) so the entry animations of `.day-group` / `.cat-row` / `.empty-state` are suppressed; paths that genuinely change the view (first entry / month switch / tab switch / search filtering) keep their animations |
+| In-place patch `patchAfterDelete()` | A swipe-delete **never rebuilds the list DOM**: it removes just the deleted row, recomputes that day's total from the `data-date` on its `.day-group` (dropping the whole group when the day has no rows left), then writes the top summary / month-over-month delta / budget in place. A full `innerHTML` rebuild makes Android WebView drop a frame while swapping, which reads as the whole list flashing — suppressing the entry animation cannot cover that part. It falls back to a silent repaint for multi-select, search filtering, a row that is no longer listed, or an emptied list that needs the empty state; when the category-detail page is open, the home list is patched too (a tab switch does not re-render the home page) |
+
+### 14.4 Back key / swipe-back stack
+
+**The problem**: every page and overlay in the front end is a class toggle, `pushState` was never called and WebView history is always one entry; the Android back gesture therefore has no interceptor and falls straight through to the Activity default of `finish()`-ing itself. The fix needs both halves (see [§8](#8-key-design-decisions-and-trade-offs)): the front end writes the UI hierarchy into history, and Android turns on `handleBackNavigation` (`src-tauri/gen/android/app/src/main/java/com/tauri_app/ledger/MainActivity.kt`).
+
+**Layer definition**: `uiLayers()` is derived from the live DOM, ordered bottom-up — that order is the order the back key unwinds: `stats` / `catdetail` / `settings` → `ai` → `search` → `select` → `sheet` → `modal` → `lock`. The category detail page always counts as two layers ("stats page + detail page"), because its entry point is the stats page.
+
+**Synchronisation rules** (`commitBackState`):
+
+| Change | Action |
+|---|---|
+| Layer count grows | `history.pushState({ layers })`, raising one sentinel, `sentinelCount++` |
+| Same count, different content (e.g. action sheet → multi-select) | `history.replaceState({ layers })` |
+| Layer count shrinks | Record the number of sentinels to retire, then silently `history.back()` them all in one go after `setTimeout(0)` |
+
+Several UI changes within the same turn (microtask) are merged into one history operation. Otherwise "close one overlay and open another" would first queue a physical back and then push a new layer, drifting the layer count.
+
+**Gesture back** (`popstate`): one gesture peels exactly one layer — after comparing against the target layers, `undoTopLayer()` closes the outermost:
+
+| Outermost layer | Action |
+|---|---|
+| `lock` | In the unlock state (`verify`) **always refused** (allowing it would bypass the PIN); inside the set-PIN flow, step back one step |
+| `modal` | `closeModal()` |
+| `sheet` | `closeSheet()` |
+| `select` | `exitSelect()` |
+| `search` | `closeSearch()` |
+| `ai` | `setStatsView('chart')` (stays on the stats page) |
+| `catdetail` | `closeCatDetail()` (returns to the stats page) |
+| `stats` / `settings` | `switchTab('home')` |
+
+Programmatic backs (overlays closed through the UI) are told apart from gesture backs by a `backSuppress` counter; the former must not trigger peeling. If the physical sentinel count is below the live UI layer count (the unlock screen that refuses to exit, or the PIN flow stepping back within one step), sentinels are topped up after the back. Only when the bottom layer is reached (`canGoBack()` false) does another back fall through to the system default of quitting the app.
+
+**Trade-off**: `uiLayers()` only recognises "what is visible right now", so an extreme path such as "open search, then switch tab" keeps no ghost layer — an acceptable degradation, self-corrected by the next sync.
 
 ---
 
@@ -790,6 +831,8 @@ The front end currently has **no automated test framework**. The cases below mus
 | U-13 | AI analysis | Without a key a Chinese message appears; with a key the analysis is generated and cached; clearing removes only the analysis cache; copy and layout hold in both themes |
 | U-14 | Theme | Follow-system / explicit dark / explicit light all switch and survive a refresh |
 | U-15 | Month-over-month delta / over-budget reminder | A rise/fall percentage appears under this month's expense (red up, green down, "持平" when the gap is < 0.05%); the row is hidden when last month has no expense or while searching; on launch, if the viewed month is already over budget a centred reminder appears once; a transaction that exactly tips the month into overspending appends the overage to the success toast |
+| U-16 | Android back gesture / back key | Unwinds layer by layer: overlay first → (second-level panel inside an overlay) → AI view → category detail → non-home tab → home; only another back at the bottom layer quits the app; closing through the UI costs no extra back press; the back key is **ineffective** on the unlock screen; in the set-PIN flow, a back at the second step returns to the first (§14.4) |
+| U-17 | No flicker after an in-place change | After a swipe-delete / amount edit / date edit / note edit / delete inside an overlay / batch re-categorise / import / clear, the list is **rebuilt as a whole but without replaying its entry animation** (no full-list fade-out-then-fade-in flicker); a swipe-delete goes further and uses an **in-place patch** that never rebuilds the whole list DOM; first entry, month switch, tab switch and search filtering — paths that genuinely change the view — still play the entry animation (§14.3) |
 
 > Divergence from the early course documents: their T-07 has been rewritten to match reality (moving a date to another out-of-window value is still rejected, but re-saving an **unchanged** out-of-window date is allowed — see §5.1), and T-14 "a corrupted data file falls back to an empty ledger" does not exist in the implementation (see §9), so it is dropped and not used as an acceptance case.
 
@@ -819,4 +862,4 @@ The front end currently has **no automated test framework**. The cases below mus
 
 ---
 
-**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.5.0 (commit `1b74e84`); after code changes, please re-verify the line numbers and measured figures listed here.
+**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.5.5 (commit to be back-filled after the commit); after code changes, please re-verify the line numbers and measured figures listed here.
