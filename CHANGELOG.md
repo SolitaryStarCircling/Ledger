@@ -17,7 +17,7 @@
 
 ## [1.6.0] — 2026-10-20
 
-提交链接（本条目提交后回填） · tag [`v1.6.0`](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.6.0)。以下改动由 `git diff` 逐条核对得出。
+提交链接 [10d3fbf](https://github.com/SolitaryStarCircling/Ledger/commit/10d3fbf) · tag [`v1.6.0`](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.6.0)。以下改动由 `git diff` 逐条核对得出。
 
 **新增**
 
