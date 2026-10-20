@@ -1,6 +1,6 @@
 # Ledger 架构文档
 
-> **语言**：[English](./ARCHITECTURE.en.md) ｜ **基线版本**：v1.4.0（commit `3199811`）｜ **最后核对**：2026-10
+> **语言**：[English](./ARCHITECTURE.en.md) ｜ **基线版本**：v1.5.0（commit `1b74e84`）｜ **最后核对**：2026-10-20
 
 **一句话定位**：Ledger 是一个离线优先（offline-first）的个人记账本 —— Tauri v2 + Rust + SQLite 单机内核，前端零框架、零打包器、零构建步骤。
 
@@ -8,7 +8,7 @@
 |---|---|
 | 读者对象 | 想读代码的 GitHub 访客、准备接手或二次开发的开发者、需要核对实现细节的使用者 |
 | 与 README 的关系 | [README.md](./README.md) 回答「这是什么 / 怎么用 / 有哪些功能」；本文回答「系统怎么搭起来的 / 关键决策为什么这么定 / 能力边界止于何处」。功能清单与安装步骤不在本文重复 |
-| 数据来源 | 全文所有数字均自 v1.4.0 源码实测。README 中已过期的数值（行数、"0 npm 依赖"等）以本文为准，详见 [§8 关键设计决策](#8-关键设计决策与取舍) 与 [§11 构建--测试--发布](#11-构建--测试--发布) |
+| 数据来源 | 全文所有数字均自 v1.5.0 源码实测（2026-10-20）。README 中已过期的数值（行数、"0 npm 依赖"等）以本文为准，详见 [§8 关键设计决策](#8-关键设计决策与取舍) 与 [§11 构建--测试--发布](#11-构建--测试--发布) |
 
 ---
 
@@ -69,7 +69,7 @@ flowchart TB
 |---|---|---|
 | 网络 | **默认零出站**；不点「生成分析」不产生任何外部请求 | `tauri.conf.json` 的 CSP `connect-src 'self' ipc: http://ipc.localhost` 使 WebView 无法发起任意出站请求；所有 AI 请求都在 Rust 侧由 `reqwest` 发出（`ai.rs`） |
 | 数据落地 | 单文件 `ledger.sqlite`，位于系统分配的应用数据目录，**不在仓库内** | `lib.rs` 的 `db_path()`（`app.path().app_data_dir()`）；`.gitignore` 排除 `*.sqlite` |
-| 前端形态 | 无框架、无打包器、无构建步骤；`index.html` 以 `type="module"` 直接加载 `main.js`（`withGlobalTauri: true`） | `package.json`（无 devDependencies 里的打包工具）、`tauri.conf.json` 的 `frontendDist: "../src"` |
+| 前端形态 | 无框架、无打包器、无构建步骤；`index.html` 以 `type="module"` 直接加载 `main.js`（`withGlobalTauri: true`） | `package.json`（devDependencies 不含任何打包工具）、`tauri.conf.json` 的 `frontendDist: "../src"` |
 | 目标平台 | Android 7.0+（API 24+）、Windows 10+ | README 目标平台表；`capabilities/default.json` 仅声明主窗口 |
 | 体积预算 | APK < 50 MB、Windows 安装包 < 10 MB（**目标值，非实测值**） | README 目标平台表 |
 | 性能目标 | 冷启动 < 2s、单笔记账 ≤ 3s（**目标值，非实测值**） | README 目标平台表 |
@@ -91,10 +91,10 @@ flowchart TB
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `src/index.html` | 699 | 全部页面结构：明细页 / 财报页 / 分类明细页 / 设置页，以及记账面板、日历、四个动作弹层、锁屏层、批量操作栏 |
-| `src/main.js` | 3810 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题 |
-| `src/styles.css` | 2353 | 全部样式：主题变量、组件、动效 |
-| `src/vendor/xlsx.full.min.js` | 929.6 KB | SheetJS 0.20.3，随包分发（离线 + 规避 CVE），仅 Excel 导入路径按需加载 |
+| `src/index.html` | 773 | 全部页面结构：明细页 / 财报页 / 分类明细页 / 设置页，以及记账面板、日历、动作弹层、锁屏层、批量操作栏 |
+| `src/main.js` | 4221 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题 |
+| `src/styles.css` | 2461 | 全部样式：主题变量、组件、动效 |
+| `src/vendor/xlsx.full.min.js` | 951,904 B（约 929.6 KB） | SheetJS 0.20.3，随包分发（离线 + 规避 CVE），仅 Excel 导入路径按需加载 |
 | `src/vendor/README.md` | — | 该 vendor 文件的来源、哈希、升级步骤 |
 
 `main.js` 内部分区（按文件中的分隔注释）：
@@ -109,20 +109,20 @@ flowchart TB
 | AI 面板 | 月度分析生成、缓存读写、隐私授权、Key 配置入口 |
 | 设置页 | 预算、主题、应用锁、分类管理、导出/导入/清空 |
 | 锁屏 | PIN 输入、解锁、设置/关闭流程 |
-| 启动 | `boot()`：主题 → 锁 → 分类 → 规则 → 流水 → 月度预算 |
+| 启动 | `boot()`：主题 → 锁 → 分类 → 规则 → 流水 → 月度预算；打开应用时的超支提醒 |
 
-### 2.2 后端（8 个模块，共 2595 行）
+### 2.2 后端（8 个模块，共 2881 行）
 
 | 模块 | 行数 | 职责 | 依赖 |
 |---|---:|---|---|
-| `main.rs` | 5 | 进程入口，调用 `ledger_lib::run()` | `lib` |
-| `lib.rs` | 512 | 装配层：托管状态、注册 36 个命令、导出/导入实现、启动迁移 | 全部业务模块 |
-| `db.rs` | 98 | 打开连接、幂等建表、种子分类、首次写入默认常用项 | `models`（隐含）、`rusqlite` |
-| `models.rs` | 35 | 三个数据结构：`Transaction` / `Template` / `Category` | `serde` |
-| `service.rs` | 864 | 金额与日期的解析校验、id 生成、CRUD、分类校验与删除保护、预算、settings 读写 | `models`、`chrono`、`rusqlite` |
-| `keys.rs` | 301 | AI 配置读写、Key 三档存储、掩码回显、旧键迁移 | `service`、`ai`、`keyring` |
-| `lock.rs` | 101 | 应用锁：PIN 格式校验、Argon2id 哈希、校验、关闭 | `service`、`argon2` |
-| `ai.rs` | 679 | OpenAI 风格 HTTP 客户端：能力档位降级、错误映射、输出解析容错、TLS 配置 | `reqwest`、`rustls`、`serde_json` |
+| `main.rs` | 6 | 进程入口，调用 `ledger_lib::run()` | `lib` |
+| `lib.rs` | 571 | 装配层：托管状态、注册 36 个命令、导出/导入实现、启动迁移 | 全部业务模块 |
+| `db.rs` | 105 | 打开连接、幂等建表、种子分类、首次写入默认常用项 | `models`（隐含）、`rusqlite` |
+| `models.rs` | 38 | 三个数据结构：`Transaction` / `Template` / `Category` | `serde` |
+| `service.rs` | 947 | 金额与日期的解析校验、id 生成、CRUD、分类校验与删除保护、预算、settings 读写 | `models`、`chrono`、`rusqlite` |
+| `keys.rs` | 339 | AI 配置读写、Key 三档存储、掩码回显、旧键迁移 | `service`、`ai`、`keyring` |
+| `lock.rs` | 118 | 应用锁：PIN 格式校验、Argon2id 哈希、校验、关闭 | `service`、`argon2` |
+| `ai.rs` | 757 | OpenAI 风格 HTTP 客户端：能力档位降级、错误映射、输出解析容错、TLS 配置 | `reqwest`、`rustls`、`serde_json` |
 
 ### 2.3 依赖方向
 
@@ -141,7 +141,7 @@ main.rs
 
 ## 3. 命令契约（36 个）
 
-来源：`lib.rs` 的 `invoke_handler` 清单（`lib.rs#L521-L557`）。下表 36 行与之逐项闭合，无多写、无少写。所有命令的失败路径统一返回 `Result<_, String>`，`String` 是可以直接展示给用户的中文提示。
+来源：`lib.rs` 的 `invoke_handler` 清单（`lib.rs#L530-L567`）。下表 36 行与之逐项闭合，无多写、无少写。所有命令的失败路径统一返回 `Result<_, String>`，`String` 是可以直接展示给用户的中文提示。
 
 **分组（7 组，合计 36）**：transactions 8 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2。
 
@@ -222,7 +222,7 @@ main.rs
 
 ## 4. 数据模型
 
-### 4.1 DDL（与 `db.rs#L14-L50` 逐字一致）
+### 4.1 DDL（与 `db.rs#L15-L49` 逐字一致）
 
 ```sql
 CREATE TABLE IF NOT EXISTS transactions (
@@ -304,7 +304,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 写入时机：**仅当 `categories` 表为空时**写入一次，用 `INSERT OR IGNORE`；用户删掉的种子分类不会在下次启动复活。`id` 沿用历史硬编码值，保证旧流水 100% 能对上分类。
 
-两个兜底分类常量在 `service.rs` 中固定为 `FALLBACK_EXPENSE = "other"`、`FALLBACK_INCOME = "other_in"`。
+两个兜底分类常量在 `service.rs` 中固定为 `FALLBACK_EXPENSE = "other"`、`FALLBACK_INCOME = "other_in"`（`service.rs#L83-L84`）。
 
 默认常用项 2 条（`tpl-meal` 吃饭 ¥20 / `tpl-metro` 地铁 ¥5），仅在 `templates` 表**本机首次创建**时写入一次（`db.rs#L62-L73`）；删除后不再生成。
 
@@ -328,32 +328,32 @@ CREATE TABLE IF NOT EXISTS settings (
 
 | 机制 | 实现 | 出处 |
 |---|---|---|
-| 连接托管 | 单条 `Mutex<Connection>` 由 `app.manage(Mutex::new(conn))` 托管，命令通过 `tauri::State` 取用 | `lib.rs#L499-L520` |
-| 锁作用域 | 同步命令持锁完成即释放；**async 命令必须先收敛锁、不得跨 `await` 持锁**（`ai_analyze` / `ai_test_key` 用内层块先取出 `api_key` 与配置再 `await`） | `lib.rs#L280-L325` |
-| 金额解析 | 逐位校验：非空、不以 `.` 开头、至多 1 个小数点、整数位 ≤9 位、小数位 ≤2 位、结果 >0 | `service.rs#L10-L47` |
-| id 生成 | 毫秒时间戳 + 进程内自增 `ID_SEQ`（从 1 起）+ 奇数倍双射混淆 low32。仅用毫秒时，同毫秒两次写入会撞 `PRIMARY KEY`；seq 从 1 起避免与「旧版本纯毫秒 id」撞车 | `service.rs#L64-L79` |
+| 连接托管 | 单条 `Mutex<Connection>` 由 `app.manage(Mutex::new(conn))` 托管，命令通过 `tauri::State` 取用 | `lib.rs#L512-L529`（`run()` 的 `setup`）；`app.manage` 在 `#L526-L527` |
+| 锁作用域 | 同步命令持锁完成即释放；**async 命令必须先收敛锁、不得跨 `await` 持锁**（`ai_analyze` / `ai_test_key` 用内层块先取出 `api_key` 与配置再 `await`） | `lib.rs#L291-L339` |
+| 金额解析 | 逐位校验：非空、不以 `.` 开头、至多 1 个小数点、整数位 ≤9 位、小数位 ≤2 位、结果 >0 | `service.rs#L10-L40` |
+| id 生成 | 毫秒时间戳 + 进程内自增 `ID_SEQ`（从 1 起）+ 奇数倍双射混淆 low32。仅用毫秒时，同毫秒两次写入会撞 `PRIMARY KEY`；seq 从 1 起避免与「旧版本纯毫秒 id」撞车 | `service.rs#L69-L81`（`ID_SEQ` 在 `#L69`） |
 | 分类校验 | `check_category` 要求分类存在且 `type` 与记录一致 | `service.rs#L86-L102` |
-| 备注规范化 | `trim()` 后按字符数 ≤30 | `service.rs#L104-L110` |
-| 日期窗口 | 修改日期限制在「今天 ± 365 天」；**但若新日期与原日期相同则放行**（否则导入的历史账单连原样保存都会被拒） | `service.rs#L181-L203`（`EDIT_DATE_MAX_DAYS = 365`） |
-| 删除保护 | 兜底分类不可删；`fallback` 必须存在且与被删分类同类型；转移 + 删除在同一事务内 | `service.rs#L629-L682` |
-| 批量改分类 | 目标分类必须与**每条**被选记录同向，否则整批拒绝（防统计串类） | `service.rs#L218+` |
-| 事务 | 使用 `unchecked_transaction()`（连接已被外部 Mutex 保护，无需再借 `&mut`） | `service.rs` 多处 |
+| 备注规范化 | `trim()` 后按字符数 ≤30 | `service.rs#L104-L111` |
+| 日期窗口 | 修改日期限制在「今天 ± 365 天」（`EDIT_DATE_MAX_DAYS = 365`，`#L7`）；**但若新日期与原日期相同则放行**（否则导入的历史账单连原样保存都会被拒） | `service.rs#L181-L203` |
+| 删除保护 | 兜底分类不可删；`fallback` 必须存在且与被删分类同类型；转移 + 删除在同一事务内 | `service.rs#L641-L695` |
+| 批量改分类 | 目标分类必须与**每条**被选记录同向，否则整批拒绝（防统计串类） | `service.rs#L230-L296` |
+| 事务 | 使用 `unchecked_transaction()`（连接已被外部 Mutex 保护，无需再借 `&mut`） | `service.rs#L286`、`#L680`、`#L698` |
 | 错误形态 | 全部 `Result<_, String>`，提示语为可直接展示的中文；网络错误经 `status_error` / `network_error` 映射 | `ai.rs#L169-L198` |
 
 ### 5.2 前端
 
 | 机制 | 实现要点 | 出处 |
 |---|---|---|
-| 面板注册表 | 所有弹层集中在 `allPanels` 数组，`openPanel/closeModal` 统一开关与取消处理；**新面板漏注册会表现为「黑屏无反应」** | `main.js#L1369-L1408` |
-| 面板互斥 | `activePanel` 记录当前弹层，键盘事件与「返回」先关弹层再关面板，避免事件穿透 | `main.js#L1374`、`#L1607`、`#L2494` |
-| 记账态 | `curType`（"expense"/"income"）与 `editingTemplateId`（`null` = 新记账，非空 = 正在改常用项）；后者决定保存走 `add_tx` 还是 `update_template` | `main.js#L2232`、`#L2437-L2460` |
-| 保存防重入 | `savingTx` 守卫，`if (savingTx) return`，避免双击/回车重复记一笔 | `main.js#L2421-L2480` |
-| 查看月份 | `viewMonth`（`YYYY-MM`）；切月必须重新 `loadBudget()`，否则会沿用上月的预算额度 | `main.js#L227`、`#L1743`、`#L1547` |
-| 锁屏层 | 默认 `display:none`，仅当 JS 移除 `hidden` 属性时显示；切后台（`visibilitychange` + `document.hidden` 且已启用锁）重新锁定 | `index.html#lockOverlay`、`main.js#L3943-L3948`、`#L4073-L4075` |
-| 分钟级重绘 | 定时器仅在「页面可见**且**跨天」时 `renderHome()`；无条件重绘会让带入场动画的列表每分钟重播动画、还会把已侧滑打开的行收回 | `main.js#L4115-L4122` |
-| 日期选择防呆 | 日历只允许在当前月 ±2 个月内翻页，超界日期渲染为不可点的 `.cal-day.off` | `main.js#L2326-L2346` |
-| 月份视图范围 | 明细页可切月份限制为「前 12 个月 ~ 后 3 个月」（`monthShiftAllowed`） | `main.js#L1732-L1738` |
-| 主题 | 三态：跟随系统（`prefers-color-scheme`）/ 显式 `data-theme="dark"` / `data-theme="light"` | `styles.css#L59+`、`main.js#L3880-L3892` |
+| 面板注册表 | 所有弹层集中在 `allPanels` 数组，`openModal/closeModal` 统一开关与取消处理；**新面板漏注册会表现为「黑屏无反应」** | `main.js#L1415-L1458` |
+| 面板互斥 | `activePanel` 记录当前弹层，键盘事件与「返回」先关弹层再关面板，避免事件穿透 | `main.js#L1420`、`#L1436`、`#L1454`、`#L2585` |
+| 记账态 | `curType`（"expense"/"income"）与 `editingTemplateId`（`null` = 新记账，非空 = 正在改常用项）；后者决定保存走 `add_tx` 还是 `update_template` | `main.js#L2310`、`#L2320-L2321`、`#L2515-L2531` |
+| 保存防重入 | `savingTx` 守卫，`if (savingTx) return`，避免双击/回车重复记一笔 | `main.js#L2499`、`#L2501-L2512` |
+| 查看月份 | `viewMonth`（`YYYY-MM`）；切月必须重新 `loadBudget()`，否则会沿用上月的预算额度 | `main.js#L248`、`#L1252`、`#L1819` |
+| 锁屏层 | 默认 `display:none`，仅当 JS 移除 `hidden` 属性时显示；切后台（`visibilitychange` + `document.hidden` 且已启用锁）重新锁定 | `index.html#lockOverlay`（L757）、`main.js#L4021`、`#L4038`、`#L4163-L4166` |
+| 分钟级重绘 | 定时器仅在「页面可见**且**跨天」时 `renderHome()`；无条件重绘会让带入场动画的列表每分钟重播动画、还会把已侧滑打开的行收回 | `main.js#L4204-L4214` |
+| 日期选择防呆 | 日历只允许在当前月 ±2 个月内翻页（`calRange()` 给出 `min`/`max`，边界处禁用箭头），超界日期渲染为不可点的 `.cal-day.off` | `main.js#L2402-L2426`（防呆在 `#L2404-L2408`） |
+| 月份视图范围 | 明细页可切月份限制为「前 12 个月 ~ 后 3 个月」（`monthShiftAllowed`） | `main.js#L1810`、`#L1819` |
+| 主题 | 三态：跟随系统（`prefers-color-scheme`）/ 显式 `data-theme="dark"` / `data-theme="light"` | `styles.css#L59-L127`、`main.js#L4179` |
 | 交互防抖 | 常用项胶囊 350ms 内防连点；长按 500ms 进入多选（横滑/抖动 >8px 取消） | `main.js` 常用项与列表手势段 |
 
 ---
@@ -366,13 +366,13 @@ CREATE TABLE IF NOT EXISTS settings (
 | 应用锁 | 4-8 位纯数字 PIN，Argon2id 哈希 + 随机盐写入 `settings`（`lock_enabled` / `lock_pin_hash`） | **不加密磁盘数据库文件**。它是「防他人在这台设备上误看」，磁盘级加密属于另一层能力，**刻意不做**（`lock.rs` 头注释已声明） |
 | PIN 校验 | 本地比对，不联网、不落盘明文；未设置哈希时一律放行 | 无重试次数限制、无锁定延时（当前实现未做） |
 | API Key 存储 | 三档：① 系统钥匙串（仅 Windows / macOS，`keyring` 条件编译）② 本机数据库（`ai_api_key`）③ 仅内存（进程内 `Mutex<Option<String>>`，退出即失效）。Android 上钥匙串不可用时回落 | `keys.rs#L10-L77`；界面只回显前 3 后 4 位掩码（≤8 位时回显 `••••`） |
-| Key 迁移 | 旧键 `deepseek_api_key` 启动时迁移到 `ai_api_key` | `keys::migrate_legacy`（`lib.rs#L516`） |
-| 备份不带凭据 | 导出先复制库文件到临时副本，`DELETE FROM settings WHERE key IN ('ai_api_key','deepseek_api_key','ai_key_hint')`，再读字节；**任一步失败回退原始字节** | `lib.rs#L331-L358` |
-| 导入范围 | 只覆盖 `transactions` / `budgets` / `templates`，`categories` 按 id **合并**（不整表清空）；**不含任何设置项**（密码、API Key、隐私授权、自动归类规则） | `lib.rs#L362-L495`；导入确认文案需明确这一点 |
-| 导入原子性 | 写临时文件 → `ATTACH DATABASE` → 校验 `sqlite_master` 确有 `transactions` 表 → 事务内 `DELETE` + `INSERT` → `COMMIT` → `DETACH` + 删临时文件；任一步失败均清理临时文件并 `DETACH` | `lib.rs#L362-L495` |
-| 分类合并理由 | 若分类整表清空，备份缺分类会把兜底分类「其他」一起删掉，导致记录退化成同名多行「其他」 | `lib.rs#L477-L486` 注释 |
+| Key 迁移 | 旧键 `deepseek_api_key` 启动时迁移到 `ai_api_key` | `keys::migrate_legacy`（`keys.rs#L277`），调用点 `lib.rs#L525` |
+| 备份不带凭据 | 导出先复制库文件到临时副本，`DELETE FROM settings WHERE key IN ('ai_api_key','deepseek_api_key','ai_key_hint')`，再读字节；**任一步失败回退原始字节** | `lib.rs#L341-L371`（剔除语句在 `#L353`） |
+| 导入范围 | 只覆盖 `transactions` / `budgets` / `templates`，`categories` 按 id **合并**（不整表清空）；**不含任何设置项**（密码、API Key、隐私授权、自动归类规则） | `lib.rs#L372-L505`；导入确认文案需明确这一点 |
+| 导入原子性 | 写临时文件 → `ATTACH DATABASE`（`#L391`）→ 校验 `sqlite_master` 确有 `transactions` 表（`#L399`）→ 事务内 `DELETE` + `INSERT`（`#L469`、`#L480`、`#L491`）→ `COMMIT` → `DETACH` + 删临时文件；任一步失败均清理临时文件并 `DETACH` | `lib.rs#L372-L505` |
+| 分类合并理由 | 若分类整表清空，备份缺分类会把兜底分类「其他」一起删掉，导致记录退化成同名多行「其他」 | `lib.rs#L446-L491` 注释 |
 | 权限声明 | `capabilities/default.json`：`core:default`、`opener:default`、`dialog:default`、`fs:default`、`fs:allow-write-file`，仅作用于 `main` 窗口 | 无 shell / http / 网络类插件权限 |
-| TLS | `reqwest` 走 rustls + ring + 内置 Mozilla 根证书（`webpki-roots`），ALPN 优先 h2 | `ai.rs#L200-L226`。改用内置根证书是因为 `rustls-platform-verifier` 在 Android 需手动 JNI 初始化，否则握手 panic |
+| TLS | `reqwest` 走 rustls + ring + 内置 Mozilla 根证书（`webpki-roots`），ALPN 优先 h2 | `ai.rs#L200-L226`（`use_preconfigured_tls` 在 `#L223`）。改用内置根证书是因为 `rustls-platform-verifier` 在 Android 需手动 JNI 初始化，否则握手 panic |
 
 ---
 
@@ -388,7 +388,7 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 末档　：json_mode=false + thinking=false
 ```
 
-逐档调用，命中即返回；`capability == true`（参数不被支持）且还有下一档时继续降级，否则抛出最后一条错误（`ai.rs#L150-L159`、`#L453+`）。
+逐档调用，命中即返回；`capability == true`（参数不被支持）且还有下一档时继续降级，否则抛出最后一条错误（`ai.rs#L150-L159` 的 `profiles()`、`#L471-L490` 的降级循环）。
 
 ### 7.2 判定与适配规则
 
@@ -399,13 +399,13 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | thinking | 只发给 DeepSeek（provider 或 base URL 命中 `deepseek`） |
 | temperature | 推理类模型（`reasoner` / `reasoning` / `r1` / `o1` / `o3` / `o4` / `thinking`）自动去掉 |
 | 本地地址 | `localhost` / `127.0.0.1` / `::1` / `0.0.0.0` / `*.local` / `host.docker.internal` / `10.x` / `192.168.x` / `172.16-31.x` / `169.254.x` 视为自建服务：**免 Key**，超时放宽到 120s（云端 45s） |
-| Base URL 归一化 | 自动补 `/chat/completions`；已含该路径则不重复拼接（`endpoint()`） |
+| Base URL 归一化 | 自动补 `/chat/completions`；已含该路径则不重复拼接（`endpoint()`，`ai.rs#L104`） |
 | Token 上限 | `max_tokens = 2000` |
 | 系统提示词 | 强制要求出现 "json" 字样并给出示例结构（OpenAI 兼容 JSON Output 的前提） |
 
 ### 7.3 输出解析容错
 
-模型（尤其是小模型）输出常不规范，解析分两级（`ai.rs#L228-L356`）：
+模型（尤其是小模型）输出常不规范，解析分两级（`ai.rs#L318-L445`）：
 
 1. **严格解析**：先剥离 ``` 围栏 → 取首个 `{` 到末个 `}` → `serde_json` 反序列化为 `AiResult`；字段齐全且有内容即返回。
 2. **宽松解析（救回）**：字段别名兜底 —— `summary` / `结论` / `总结` / `概述`；`advice` / `建议` / `suggestions`；分类数组 `categories` / `分类`（最多取 12 条）；单条内 `name`/`分类`/`category`、`amount`/`金额`、`share`/`占比`、`verdict`/`评价`/`status`、`comment`/`点评`/`说明`/`reason`；数字兼容字符串形态。
@@ -413,7 +413,7 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 
 ### 7.4 缓存与清理
 
-月度分析结果以 `settings` 键 `ai_analysis_<YYYY-MM>` 缓存（前端写入，见 `main.js#L3712`）；`ai_clear_analyses` 按前缀 `ai_analysis_` 批量删除，只动缓存、不动账目与 Key。前端「是否把备注发给 AI」由 `ai_include_notes` 控制，首次使用需通过 `ai_privacy_accepted` 授权。
+月度分析结果以 `settings` 键 `ai_analysis_<YYYY-MM>` 缓存（前端写入，见 `main.js#L3750`、`#L3803`）；`ai_clear_analyses` 按前缀 `ai_analysis_` 批量删除，只动缓存、不动账目与 Key。前端「是否把备注发给 AI」由 `ai_include_notes` 控制，首次使用需通过 `ai_privacy_accepted` 授权。
 
 ---
 
@@ -428,8 +428,8 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | SheetJS 0.20.3 随包分发（vendored） | 保证离线；npm 上 `xlsx` 停在 0.18.5 且有未修复漏洞（CVE-2023-30533 原型污染、CVE-2024-22363 ReDoS），而本项目正解析用户从支付宝/微信导出的外部文件，属高危触发场景 | 运行时 CDN 拉取：破坏离线承诺、执行远程代码；npm 0.18.5：带已知漏洞 |
 | Excel 库按需动态加载 | CSV 路径完全不碰它，因此不影响冷启动 | 首屏静态引入：为极少数导入操作拖慢每次启动 |
 | 手写 SVG 圆环图 | 一条 `stroke-dasharray`/`stroke-dashoffset` 过渡即可，无需图表库 | Chart.js/ECharts：体积与依赖都不划算 |
-| rsLS/rustls + ring + 内置根证书，避开 OpenSSL | Windows 与 Android 编译都不需要 cmake / nasm / OpenSSL；避免 Android 上 platform-verifier 的 JNI 初始化问题 | openssl：跨平台编译负担；platform-verifier：Android 需手动初始化，否则握手 panic |
-| Argon2id 做 PIN 哈希 | 纯 Rust、无 C 依赖链；慢哈希适合抵御离线爆破 | 明文/ MD5：不可接受；bcrypt：需要 C 依赖 |
+| rustls + ring + 内置根证书，避开 OpenSSL | Windows 与 Android 编译都不需要 cmake / nasm / OpenSSL；避免 Android 上 platform-verifier 的 JNI 初始化问题 | openssl：跨平台编译负担；platform-verifier：Android 需手动初始化，否则握手 panic |
+| Argon2id 做 PIN 哈希 | 纯 Rust、无 C 依赖链；慢哈希适合抵御离线爆破 | 明文 / MD5：不可接受；bcrypt：需要 C 依赖 |
 | 导入分类「按 id 合并」而非整表覆盖 | 备份缺分类时若清空，会把兜底分类「其他」一起删掉，记录退化成多行同名「其他」 | 整表 DELETE + INSERT：会破坏兜底分类；按记录 fallback 重挂：批量场景语义复杂 |
 | 导入不覆盖任何设置项 | 备份是「账目数据」载体，不是「设备配置」载体；把密码/Key/授权搬来会跨设备串味，且有安全风险 | 全库覆盖：会把另一台设备的凭据带过来 |
 | Key 三档存储而非强制钥匙串 | 桌面有系统凭据管理器，移动端没有；强制单一方案会在某一平台直接不可用 | 只存数据库：桌面端白白降低安全性；只存内存：每次启动都要重填 |
@@ -459,10 +459,10 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | 项 | 现状 |
 |---|---|
 | schema 变更 | 无迁移框架，只能新增整张表（§4.5） |
-| 损坏数据库 | 打开失败直接返回错误，**不自动回退空库**（`lib.rs#L512-L513`）；用户需靠备份恢复 |
+| 损坏数据库 | 打开失败直接返回错误，**不自动回退空库**（`lib.rs#L521-L522`）；用户需靠备份恢复 |
 | PIN 爆破防护 | 无尝试次数限制与延时 |
 | 导入范围 | 不含设置项；缺列的新旧备份不兼容 |
-| 前端规模 | 单文件 `main.js` 3810 行，无模块拆分；靠分区注释维持可读性 |
+| 前端规模 | 单文件 `main.js` 4221 行，无模块拆分；靠分区注释维持可读性 |
 | 查询规模 | 全量加载 + 前端过滤；未做分页/虚拟列表，超大账本（万条以上）未做性能验证 |
 
 **与早期课程文档的差异说明**：项目早期文档集（`ledger document/`，从未纳入版本控制）中的若干描述已与现状不符，本文不沿用。典型三处：① 其 UI 规范写的是 iOS 系统色（`#F2F2F7` / `#007AFF` / 24px 圆角），现行主题是暖中性纸感 + 暗靛，实测值见 §13；② 其数据库文档只描述 1 张表，实际为 5 张（§4）；③ 其测试计划中的「改日期为 400 天前一律拒绝」与现状相反（现状允许**未修改日期**的原样保存）、「数据文件损坏回退空账」在代码中并未实现。
@@ -474,32 +474,33 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 ```
 ledger/
 ├── src/                          前端（原生 HTML/CSS/JS，无构建）
-│   ├── index.html                699 行 · 全部页面结构
-│   ├── styles.css                2353 行 · 主题变量与全部样式
-│   ├── main.js                   3810 行 · 全部逻辑（ES Module）
+│   ├── index.html                773 行 · 全部页面结构
+│   ├── styles.css                2461 行 · 主题变量与全部样式
+│   ├── main.js                   4221 行 · 全部逻辑（ES Module）
 │   └── vendor/
-│       ├── xlsx.full.min.js      SheetJS 0.20.3，随包分发
+│       ├── xlsx.full.min.js      SheetJS 0.20.3，随包分发（951,904 B）
 │       └── README.md             来源 / SHA-256 / 升级步骤
 ├── src-tauri/                    Rust 后端
 │   ├── src/
-│   │   ├── main.rs               5 行 · 入口
-│   │   ├── lib.rs                512 行 · 36 个命令注册 + 导入导出 + 启动迁移
-│   │   ├── models.rs             35 行 · Transaction / Template / Category
-│   │   ├── db.rs                 98 行 · 建表与种子数据
-│   │   ├── service.rs            864 行 · 业务逻辑
-│   │   ├── keys.rs               301 行 · API Key 三档存储
-│   │   ├── lock.rs               101 行 · 应用锁
-│   │   └── ai.rs                 679 行 · AI 客户端
+│   │   ├── main.rs               6 行 · 入口
+│   │   ├── lib.rs                571 行 · 36 个命令注册 + 导入导出 + 启动迁移
+│   │   ├── models.rs             38 行 · Transaction / Template / Category
+│   │   ├── db.rs                 105 行 · 建表与种子数据
+│   │   ├── service.rs            947 行 · 业务逻辑
+│   │   ├── keys.rs               339 行 · API Key 三档存储
+│   │   ├── lock.rs               118 行 · 应用锁
+│   │   └── ai.rs                 757 行 · AI 客户端
 │   ├── capabilities/default.json 权限声明（仅 main 窗口）
 │   ├── icons/                    应用图标
 │   ├── gen/android/              Android Gradle 工程（已入库，编译产物不入库）
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           窗口、CSP、打包配置
 ├── docs/                         截图（detail.png / account.png / stats.png）
-├── .trae/                        本地开发辅助目录（未纳入版本控制）
+├── .trae/                        本地开发辅助目录（未被 .gitignore 忽略，处于未跟踪状态）
 ├── README.md                     面向使用者与开发者的入口文档
 ├── ARCHITECTURE.md               本文件
 ├── ARCHITECTURE.en.md            英文版
+├── CHANGELOG.md                  版本更新日志（回填自 git 提交与 Release）
 ├── LICENSE                       MIT
 ├── package.json                  仅一个脚本 `tauri`，仅一个 devDependency `@tauri-apps/cli`
 ├── package-lock.json
@@ -509,7 +510,9 @@ ledger/
 
 **不入库的东西**（`.gitignore` 明确排除）：`node_modules/`、`target/`、`src-tauri/gen/android/` 下的编译产物（`build` / `.gradle`）、APK/AAB/MSI/EXE、Android 签名文件与凭据、`*.sqlite*`（真实账目）、本地备份与离线文档目录。
 
-> 仓库当前受版本控制的文件约 93 个；数据库文件 `ledger.sqlite` 由系统应用数据目录承载，克隆仓库不会带上任何真实账目。
+> 仓库当前受版本控制的文件 96 个；数据库文件 `ledger.sqlite` 由系统应用数据目录承载，克隆仓库不会带上任何真实账目。
+>
+> `.trae/` 是本地开发辅助目录，目前**不在** `.gitignore` 排除清单内，因此它一直是「未跟踪」状态（`git status` 里显示为 `??`），任何一次 `git add -A` 都会把它一并纳入暂存区。
 
 ---
 
@@ -535,6 +538,7 @@ npm run tauri android init     # 生成 gen/android 工程（首次；该目录�
 npm run tauri android dev      # 真机 / 模拟器调试
 
 npm run tauri android build    # 产出 APK / AAB
+npm run android:release:arm64  # 便捷脚本：直接产出 arm64 release APK（见 11.4）
 
 npm run tauri build            # Windows 桌面端（NSIS / MSI）
 
@@ -634,7 +638,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 
 ## 13. UI 设计语言
 
-主题是**「暖中性纸感 + 暗靛强调」**，不是任何平台的系统色。以下数值全部实测自 `styles.css#L2-L57`。
+主题是**「暖中性纸感 + 暗靛强调」**，不是任何平台的系统色。以下数值全部实测自 `styles.css#L2-L57`（浅色 `:root` 块），深色块见同文件 `#L59-L127`。
 
 ### 13.1 主题变量（浅色）
 
@@ -647,7 +651,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | 语义色 | 强调 `--blue: #58619D`（暗靛）+ `--blue-soft: #EDEEF6`；收入 `--green: #5E7A63`；危险 `--red: #A2605C`（均低饱和） |
 | 圆环分片 | `--seg-1: #58619D` / `--seg-2: #8E97B8` / `--seg-3: #9AA88F` / `--seg-4: #C0A98E` / `--seg-5: #D6D2CB`（同家族低饱和） |
 
-深色通过两个通道同时支持：`@media (prefers-color-scheme: dark)`（跟随系统）与 `[data-theme="dark"]`（显式切换），显式浅色用 `[data-theme="light"]` 覆盖。
+深色通过两个通道同时支持：`@media (prefers-color-scheme: dark)`（跟随系统，`styles.css#L59-L93`）与 `[data-theme="dark"]`（显式切换，`#L95-L127`），显式浅色用 `[data-theme="light"]` 覆盖。
 
 ### 13.2 形状与质感
 
@@ -673,6 +677,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | 按压回弹 | `cubic-bezier(.34,1.56,.64,1)` |
 | 列表项入场 | `fadeUp .45s cubic-bezier(.2,.8,.2,1)` |
 | 圆环图描边 | `stroke-dasharray` 过渡 `.85s` |
+| 超支提醒卡 | 红色警示样式，停留 3.2s（普通成功卡 1.6s） |
 
 弹层的入场淡入动画**只在 `.show` 时触发**，保证每次打开都是重新错峰淡入。
 
@@ -709,7 +714,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 分类明细页 · 设置页 · 锁屏层
 ```
 
-### 14.2 三条核心流程
+### 14.2 四条核心流程
 
 | 流程 | 步骤 |
 |---|---|
@@ -738,7 +743,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | 模块 | 数量 | 覆盖点 |
 |---|---:|---|
 | `service.rs` | 7 | 前缀删除把 `_` 当字面量（不是通配）、同毫秒连续写入 id 不撞、单条改备注（trim 后落库、清空放行、31 字拒绝、记录不存在报错）、删除分类的兜底校验（缺失/跨类型均拒绝）、日期窗口（原样保存超窗日期放行、改成另一个超窗日期拒绝）、批量改分类的收支方向守卫、同一类型下分类名去重 |
-| `ai.rs` | 12（含 1 ignored） | 围栏剥离、纯 JSON 解析、中文键名与字符串型建议的救回、垃圾输入拒绝、提示词含 json 关键字与示例、本地地址识别、Base URL 不重复拼路径、thinking 只给 DeepSeek 且 json 模式可降级、推理模型去 temperature、可重试判定边界、`TcpListener` mock OpenAI 服务端的端到端降级；**ignored**：真实 TLS 连通与错误映射（标注「需要联网；不消耗 tokens」） |
+| `ai.rs` | 12（含 1 ignored） | 围栏剥离、纯 JSON 解析、中文键名与字符串型建议的救回、垃圾输入拒绝、提示词含 json 关键字与示例、本地地址识别、Base URL 不重复拼路径、thinking 只给 DeepSeek 且 json 模式可降级、推理模型去 temperature、可重试判定边界、`TcpListener` mock OpenAI 服务端的端到端降级；**ignored**：真实 TLS 连通与错误映射（标注「需要联网；不消耗 tokens」，`ai.rs#L718`） |
 | `keys.rs` | 3 | 掩码不泄露中段、默认数据库存储往返、本地地址免 Key 且非法 Base URL 拒绝 |
 | `lock.rs` | 2 | PIN 哈希往返（设置→校验→关闭→放行）、PIN 格式规则（长度/纯数字） |
 
@@ -784,6 +789,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | U-12 | 应用锁 | 设置需先确认弹层；4-8 位纯数字（超 8 位提示「密码最多 8 位数字」）；设置/确认需手按「✓」；解锁态满位自动提交；切后台回锁 |
 | U-13 | AI 分析 | 未配置 Key 时给出中文提示；配置后可生成并缓存；清除只删分析缓存；两种主题下文案与排版一致 |
 | U-14 | 主题 | 跟随系统 / 显式深色 / 显式浅色三态切换，刷新后保持 |
+| U-15 | 较上月环比 / 超支提醒 | 本月支出下方显示涨跌百分比（涨红降绿，差值 <0.05% 显示「持平」）；上月无支出或搜索态整行隐藏；打开应用时若本月已超支居中提醒一次；记账恰好把本月推成超支时在成功提示后追加超支金额 |
 
 > 与早期课程文档的差异：其测试计划的 T-07 已按现状改写（改成另一个超窗日期仍拒绝，但**原样保存**超窗日期放行，见 §5.1）；T-14「数据文件损坏自动回退空账」在实现中并不存在（见 §9），故剔除、不列为验收项。
 
@@ -813,4 +819,4 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 
 ---
 
-**维护**：SolitaryStarCircling（项目作者）· 本文档对应基线 v1.4.0，代码变更后请同步修订本节所列的行号与实测数字。
+**维护**：SolitaryStarCircling（项目作者）· 本文档对应基线 v1.5.0（commit `1b74e84`），代码变更后请同步修订本节所列的行号与实测数字。

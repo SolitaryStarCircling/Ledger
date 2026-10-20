@@ -1,6 +1,6 @@
 # Ledger Architecture
 
-> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.4.0 (commit `3199811`) ｜ **Last verified**: 2026-10
+> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.5.0 (commit `1b74e84`) ｜ **Last verified**: 2026-10-20
 
 **One line**: Ledger is an offline-first personal expense tracker — a Tauri v2 + Rust + SQLite single-machine core with a front end that has no framework, no bundler and no build step.
 
@@ -8,7 +8,7 @@
 |---|---|
 | Audience | GitHub visitors reading the code, developers taking over or extending it, users verifying implementation details |
 | Relationship to README | [README.md](./README.md) answers "what is this / how do I use it / what features exist"; this document answers "how the system is put together / why the key decisions were made that way / where the capability boundary sits". Feature lists and installation steps are not repeated here |
-| Data source | Every number below was measured from the v1.4.0 source. Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
+| Data source | Every number below was measured from the v1.5.0 source (2026-10-20). Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
 
 ---
 
@@ -91,10 +91,10 @@ flowchart TB
 
 | File | Lines | Responsibility |
 |---|---:|---|
-| `src/index.html` | 699 | All page structure: home / stats / category detail / settings, plus the entry sheet, calendar, four action sheets, lock overlay and batch-action bar |
-| `src/main.js` | 3810 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme |
-| `src/styles.css` | 2353 | All styling: theme variables, components, motion |
-| `src/vendor/xlsx.full.min.js` | 929.6 KB | SheetJS 0.20.3, shipped in-repo (offline + CVE avoidance), lazily loaded only on the Excel import path |
+| `src/index.html` | 773 | All page structure: home / stats / category detail / settings, plus the entry sheet, calendar, action sheets, lock overlay and batch-action bar |
+| `src/main.js` | 4221 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme |
+| `src/styles.css` | 2461 | All styling: theme variables, components, motion |
+| `src/vendor/xlsx.full.min.js` | 951,904 B (≈ 929.6 KB) | SheetJS 0.20.3, shipped in-repo (offline + CVE avoidance), lazily loaded only on the Excel import path |
 | `src/vendor/README.md` | — | Origin, hash and upgrade steps for the vendored file |
 
 Sections inside `main.js` (following the section comments in the file):
@@ -102,27 +102,27 @@ Sections inside `main.js` (following the section comments in the file):
 | Section | Main output |
 |---|---|
 | Categories & rules | `CATEGORIES` / `CAT_MAP` loading, custom keyword auto-categorisation rules (`cat_rules`) |
-| Home page | Month list grouped by day, search, month-over-month delta, multi-select batch actions, swipe-to-delete, long-press menu, quick-template chips |
+| Home page | Month list grouped by day, search, month-over-month delta, multi-select batch actions, swipe-to-delete, long-press menu (including single-record note edit), quick-template chips |
 | Entry sheet | Numeric keypad, amount input, category grid, date calendar, save-as-template, re-entry guard |
 | Stats page | Period switching (year/month/week/day), hand-written SVG donut, category list, 6-month trend, expense/income views |
 | Category detail | Monthly detail and statistics for one category |
 | AI panel | Monthly analysis generation, cache read/write, privacy consent, key configuration entry |
 | Settings | Budget, theme, app lock, category management, export/import/clear |
 | Lock screen | PIN entry, unlock, set/disable flows |
-| Boot | `boot()`: theme → lock → categories → rules → transactions → monthly budget |
+| Boot | `boot()`: theme → lock → categories → rules → transactions → monthly budget; the over-budget reminder on launch |
 
-### 2.2 Backend (8 modules, 2595 lines total)
+### 2.2 Backend (8 modules, 2881 lines total)
 
 | Module | Lines | Responsibility | Depends on |
 |---|---:|---|---|
-| `main.rs` | 5 | Process entry point, calls `ledger_lib::run()` | `lib` |
-| `lib.rs` | 512 | Wiring layer: manages state, registers 36 commands, implements export/import, startup migration | all business modules |
-| `db.rs` | 98 | Opens the connection, idempotent schema creation, seed categories, first-run default templates | `models` (implicitly), `rusqlite` |
-| `models.rs` | 35 | Three data structures: `Transaction` / `Template` / `Category` | `serde` |
-| `service.rs` | 864 | Amount and date parsing/validation, id generation, CRUD, category validation and delete protection, budget, settings access | `models`, `chrono`, `rusqlite` |
-| `keys.rs` | 301 | AI config read/write, three-tier key storage, masked echo, legacy key migration | `service`, `ai`, `keyring` |
-| `lock.rs` | 101 | App lock: PIN format validation, Argon2id hashing, verification, disabling | `service`, `argon2` |
-| `ai.rs` | 679 | OpenAI-style HTTP client: capability-profile degradation, error mapping, tolerant output parsing, TLS setup | `reqwest`, `rustls`, `serde_json` |
+| `main.rs` | 6 | Process entry point, calls `ledger_lib::run()` | `lib` |
+| `lib.rs` | 571 | Wiring layer: manages state, registers 36 commands, implements export/import, startup migration | all business modules |
+| `db.rs` | 105 | Opens the connection, idempotent schema creation, seed categories, first-run default templates | `models` (implicitly), `rusqlite` |
+| `models.rs` | 38 | Three data structures: `Transaction` / `Template` / `Category` | `serde` |
+| `service.rs` | 947 | Amount and date parsing/validation, id generation, CRUD, category validation and delete protection, budget, settings access | `models`, `chrono`, `rusqlite` |
+| `keys.rs` | 339 | AI config read/write, three-tier key storage, masked echo, legacy key migration | `service`, `ai`, `keyring` |
+| `lock.rs` | 118 | App lock: PIN format validation, Argon2id hashing, verification, disabling | `service`, `argon2` |
+| `ai.rs` | 757 | OpenAI-style HTTP client: capability-profile degradation, error mapping, tolerant output parsing, TLS setup | `reqwest`, `rustls`, `serde_json` |
 
 ### 2.3 Dependency direction
 
@@ -141,7 +141,7 @@ Rule: business functions always take a `&Connection` supplied by the caller insi
 
 ## 3. Command contract (36 commands)
 
-Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L521-L557`). The 36 rows below close exactly against it — nothing extra, nothing missing. Every failure path returns `Result<_, String>`, where the `String` is a user-displayable Chinese message.
+Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L530-L567`). The 36 rows below close exactly against it — nothing extra, nothing missing. Every failure path returns `Result<_, String>`, where the `String` is a user-displayable Chinese message.
 
 **Groups (7, 36 total)**: transactions 8 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2.
 
@@ -222,7 +222,7 @@ Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L521-L557`). The 36 rows 
 
 ## 4. Data model
 
-### 4.1 DDL (byte-for-byte identical to `db.rs#L14-L50`)
+### 4.1 DDL (byte-for-byte identical to `db.rs#L15-L49`)
 
 ```sql
 CREATE TABLE IF NOT EXISTS transactions (
@@ -304,7 +304,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 When they are written: **only when the `categories` table is empty**, once, using `INSERT OR IGNORE`; categories the user deletes never come back on the next start. The `id` values keep their historical hard-coded strings so that old transactions match 100%.
 
-The two fallback category constants are fixed in `service.rs`: `FALLBACK_EXPENSE = "other"`, `FALLBACK_INCOME = "other_in"`.
+The two fallback category constants are fixed in `service.rs`: `FALLBACK_EXPENSE = "other"`, `FALLBACK_INCOME = "other_in"` (`service.rs#L83-L84`).
 
 Two default quick templates (`tpl-meal` 吃饭 ¥20 / `tpl-metro` 地铁 ¥5) are written once, only when the `templates` table is **created for the first time on this machine** (`db.rs#L62-L73`); deleting them does not regenerate them.
 
@@ -328,32 +328,32 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 
 | Mechanism | Implementation | Source |
 |---|---|---|
-| Connection ownership | A single `Mutex<Connection>` managed via `app.manage(Mutex::new(conn))`; commands obtain it through `tauri::State` | `lib.rs#L499-L520` |
-| Lock scope | Synchronous commands release the lock as soon as they finish; **async commands must narrow the lock first and never hold it across `await`** (`ai_analyze` / `ai_test_key` use an inner block to copy out the key and config before awaiting) | `lib.rs#L280-L325` |
-| Amount parsing | Digit-by-digit validation: non-empty, no leading `.`, at most one decimal point, ≤ 9 integer digits, ≤ 2 decimal digits, result > 0 | `service.rs#L10-L47` |
-| id generation | Millisecond timestamp + in-process counter `ID_SEQ` (starting at 1) + odd-multiplier bijective mix of the low 32 bits. With only the millisecond, two writes in the same millisecond would collide on `PRIMARY KEY`; starting at 1 avoids colliding with "old-version pure-millisecond" ids | `service.rs#L64-L79` |
+| Connection ownership | A single `Mutex<Connection>` managed via `app.manage(Mutex::new(conn))`; commands obtain it through `tauri::State` | `lib.rs#L512-L529` (the `setup` block of `run()`); `app.manage` at `#L526-L527` |
+| Lock scope | Synchronous commands release the lock as soon as they finish; **async commands must narrow the lock first and never hold it across `await`** (`ai_analyze` / `ai_test_key` use an inner block to copy out the key and config before awaiting) | `lib.rs#L291-L339` |
+| Amount parsing | Digit-by-digit validation: non-empty, no leading `.`, at most one decimal point, ≤ 9 integer digits, ≤ 2 decimal digits, result > 0 | `service.rs#L10-L40` |
+| id generation | Millisecond timestamp + in-process counter `ID_SEQ` (starting at 1) + odd-multiplier bijective mix of the low 32 bits. With only the millisecond, two writes in the same millisecond would collide on `PRIMARY KEY`; starting at 1 avoids colliding with "old-version pure-millisecond" ids | `service.rs#L69-L81` (`ID_SEQ` at `#L69`) |
 | Category validation | `check_category` requires the category to exist with a matching `type` | `service.rs#L86-L102` |
-| Note normalisation | `trim()` then ≤ 30 characters | `service.rs#L104-L110` |
-| Date window | Date edits are limited to "today ± 365 days"; **but a new date equal to the original is always allowed** (otherwise an imported historical transaction could not even be re-saved unchanged) | `service.rs#L181-L203` (`EDIT_DATE_MAX_DAYS = 365`) |
-| Delete protection | The fallback category cannot be deleted; `fallback` must exist and match the type of the deleted category; the move and the delete happen in one transaction | `service.rs#L629-L682` |
-| Batch re-categorisation | The target category must match the direction of **every** selected record, otherwise the whole batch is rejected (prevents statistics from crossing expense/income) | `service.rs#L218+` |
-| Transactions | `unchecked_transaction()` is used (the connection is already guarded by the outer mutex, so no `&mut` borrow is needed) | multiple places in `service.rs` |
+| Note normalisation | `trim()` then ≤ 30 characters | `service.rs#L104-L111` |
+| Date window | Date edits are limited to "today ± 365 days" (`EDIT_DATE_MAX_DAYS = 365`, `#L7`); **but a new date equal to the original is always allowed** (otherwise an imported historical transaction could not even be re-saved unchanged) | `service.rs#L181-L203` |
+| Delete protection | The fallback category cannot be deleted; `fallback` must exist and match the type of the deleted category; the move and the delete happen in one transaction | `service.rs#L641-L695` |
+| Batch re-categorisation | The target category must match the direction of **every** selected record, otherwise the whole batch is rejected (prevents statistics from crossing expense/income) | `service.rs#L230-L296` |
+| Transactions | `unchecked_transaction()` is used (the connection is already guarded by the outer mutex, so no `&mut` borrow is needed) | `service.rs#L286`, `#L680`, `#L698` |
 | Error shape | Always `Result<_, String>`, with directly displayable Chinese messages; network errors are mapped by `status_error` / `network_error` | `ai.rs#L169-L198` |
 
 ### 5.2 Front end
 
 | Mechanism | Implementation notes | Source |
 |---|---|---|
-| Panel registry | Every sheet/modal lives in the `allPanels` array; `openPanel` / `closeModal` toggle them and handle cancellation uniformly — **a new panel that is not registered shows up as "black screen, no response"** | `main.js#L1369-L1408` |
-| Panel exclusivity | `activePanel` tracks the current overlay so keyboard events and "back" act on the overlay first, preventing event bleed-through | `main.js#L1374`, `#L1607`, `#L2494` |
-| Entry state | `curType` ("expense"/"income") and `editingTemplateId` (`null` = new entry, non-null = editing a quick template); the latter decides whether save goes through `add_tx` or `update_template` | `main.js#L2232`, `#L2437-L2460` |
-| Save re-entry guard | The `savingTx` flag with `if (savingTx) return`, preventing a double-tap or double-Enter from recording two transactions | `main.js#L2421-L2480` |
-| View month | `viewMonth` (`YYYY-MM`); switching months must call `loadBudget()` again, otherwise the previous month's budget lingers | `main.js#L227`, `#L1743`, `#L1547` |
-| Lock overlay | Defaults to `display:none`, shown only when JS removes the `hidden` attribute; going to the background (`visibilitychange` + `document.hidden` while the lock is enabled) re-locks | `index.html#lockOverlay`, `main.js#L3943-L3948`, `#L4073-L4075` |
-| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4115-L4122` |
-| Date picker guard | The calendar only pages within the current month ±2; out-of-range days render as non-clickable `.cal-day.off` | `main.js#L2326-L2346` |
-| Month view range | The home page allows switching within "12 months back to 3 months forward" (`monthShiftAllowed`) | `main.js#L1732-L1738` |
-| Theme | Three states: follow the system (`prefers-color-scheme`), explicit `data-theme="dark"`, explicit `data-theme="light"` | `styles.css#L59+`, `main.js#L3880-L3892` |
+| Panel registry | Every sheet/modal lives in the `allPanels` array; `openModal` / `closeModal` toggle them and handle cancellation uniformly — **a new panel that is not registered shows up as "black screen, no response"** | `main.js#L1415-L1458` |
+| Panel exclusivity | `activePanel` tracks the current overlay so keyboard events and "back" act on the overlay first, preventing event bleed-through | `main.js#L1420`, `#L1436`, `#L1454`, `#L2585` |
+| Entry state | `curType` ("expense"/"income") and `editingTemplateId` (`null` = new entry, non-null = editing a quick template); the latter decides whether save goes through `add_tx` or `update_template` | `main.js#L2310`, `#L2320-L2321`, `#L2515-L2531` |
+| Save re-entry guard | The `savingTx` flag with `if (savingTx) return`, preventing a double-tap or double-Enter from recording two transactions | `main.js#L2499`, `#L2501-L2512` |
+| View month | `viewMonth` (`YYYY-MM`); switching months must call `loadBudget()` again, otherwise the previous month's budget lingers | `main.js#L248`, `#L1252`, `#L1819` |
+| Lock overlay | Defaults to `display:none`, shown only when JS removes the `hidden` attribute; going to the background (`visibilitychange` + `document.hidden` while the lock is enabled) re-locks | `index.html#lockOverlay` (L757), `main.js#L4021`, `#L4038`, `#L4163-L4166` |
+| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4204-L4214` |
+| Date picker guard | The calendar only pages within the current month ±2 (`calRange()` supplies `min`/`max` and the arrows are disabled at the edges); out-of-range days render as non-clickable `.cal-day.off` | `main.js#L2402-L2426` (guard at `#L2404-L2408`) |
+| Month view range | The home page allows switching within "12 months back to 3 months forward" (`monthShiftAllowed`) | `main.js#L1810`, `#L1819` |
+| Theme | Three states: follow the system (`prefers-color-scheme`), explicit `data-theme="dark"`, explicit `data-theme="light"` | `styles.css#L59-L127`, `main.js#L4179` |
 | Input debounce | Quick-template chips reject repeat taps within 350 ms; a 500 ms long press enters multi-select (cancelled by a horizontal swipe or > 8 px jitter) | `main.js`, quick-template and list-gesture sections |
 
 ---
@@ -366,13 +366,13 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 | App lock | A 4–8 digit numeric PIN hashed with Argon2id and a random salt into `settings` (`lock_enabled` / `lock_pin_hash`) | **It does not encrypt the on-disk database.** It prevents someone else from casually reading your ledger on this device; disk encryption is a separate capability and is **deliberately not implemented** (stated in the `lock.rs` header comment) |
 | PIN verification | Compared locally; never sent anywhere, never stored in plaintext; always passes when no hash exists | No attempt counter and no lockout delay (not implemented) |
 | API key storage | Three tiers: (1) OS keychain (Windows / macOS only, conditional compilation of `keyring`), (2) local database (`ai_api_key`), (3) memory only (in-process `Mutex<Option<String>>`, gone on exit). Android falls back when the keychain is unavailable | `keys.rs#L10-L77`; the UI only echoes the first 3 and last 4 characters (for ≤ 8 characters it echoes `••••`) |
-| Key migration | The legacy `deepseek_api_key` is migrated to `ai_api_key` on startup | `keys::migrate_legacy` (`lib.rs#L516`) |
-| Backup carries no credentials | Export copies the DB to a temp file and runs `DELETE FROM settings WHERE key IN ('ai_api_key','deepseek_api_key','ai_key_hint')` before reading bytes; **any failure falls back to the raw bytes** | `lib.rs#L331-L358` |
-| Import scope | Covers only `transactions` / `budgets` / `templates`; `categories` are **merged** by id (never emptied wholesale); **no settings are imported** (lock PIN, API key, privacy consent, auto-categorisation rules) | `lib.rs#L362-L495`; the import confirmation copy must state this |
-| Import atomicity | Write a temp file → `ATTACH DATABASE` → verify `sqlite_master` really contains `transactions` → `DELETE` + `INSERT` inside a transaction → `COMMIT` → `DETACH` and delete the temp file; any failure cleans up the temp file and `DETACH`es | `lib.rs#L362-L495` |
-| Why categories are merged | Emptying the table would delete the fallback category "其他" when the backup lacks categories, degrading records into several rows all named "其他" | comment at `lib.rs#L477-L486` |
+| Key migration | The legacy `deepseek_api_key` is migrated to `ai_api_key` on startup | `keys::migrate_legacy` (`keys.rs#L277`), called at `lib.rs#L525` |
+| Backup carries no credentials | Export copies the DB to a temp file and runs `DELETE FROM settings WHERE key IN ('ai_api_key','deepseek_api_key','ai_key_hint')` before reading bytes; **any failure falls back to the raw bytes** | `lib.rs#L341-L371` (strip statement at `#L353`) |
+| Import scope | Covers only `transactions` / `budgets` / `templates`; `categories` are **merged** by id (never emptied wholesale); **no settings are imported** (lock PIN, API key, privacy consent, auto-categorisation rules) | `lib.rs#L372-L505`; the import confirmation copy must state this |
+| Import atomicity | Write a temp file → `ATTACH DATABASE` (`#L391`) → verify `sqlite_master` really contains `transactions` (`#L399`) → `DELETE` + `INSERT` inside a transaction (`#L469`, `#L480`, `#L491`) → `COMMIT` → `DETACH` and delete the temp file; any failure cleans up the temp file and `DETACH`es | `lib.rs#L372-L505` |
+| Why categories are merged | Emptying the table would delete the fallback category "其他" when the backup lacks categories, degrading records into several rows all named "其他" | comment at `lib.rs#L446-L491` |
 | Permission declarations | `capabilities/default.json`: `core:default`, `opener:default`, `dialog:default`, `fs:default`, `fs:allow-write-file`, scoped to the `main` window only | No shell / http / network plugin permissions |
-| TLS | `reqwest` uses rustls + ring with bundled Mozilla roots (`webpki-roots`), ALPN preferring h2 | `ai.rs#L200-L226`. Bundled roots are used because `rustls-platform-verifier` needs manual JNI initialisation on Android, otherwise the handshake panics |
+| TLS | `reqwest` uses rustls + ring with bundled Mozilla roots (`webpki-roots`), ALPN preferring h2 | `ai.rs#L200-L226` (`use_preconfigured_tls` at `#L223`). Bundled roots are used because `rustls-platform-verifier` needs manual JNI initialisation on Android, otherwise the handshake panics |
 
 ---
 
@@ -388,7 +388,7 @@ Profile 2: json_mode=true  + thinking=false    ← only exists when Profile 1 ex
 Last      : json_mode=false + thinking=false
 ```
 
-Profiles are attempted in order and the first success wins; when `capability == true` (the parameter is unsupported) and another profile remains, it keeps degrading, otherwise the last error is returned (`ai.rs#L150-L159`, `#L453+`).
+Profiles are attempted in order and the first success wins; when `capability == true` (the parameter is unsupported) and another profile remains, it keeps degrading, otherwise the last error is returned (`profiles()` at `ai.rs#L150-L159`, the degradation loop at `#L471-L490`).
 
 ### 7.2 Decision and adaptation rules
 
@@ -399,13 +399,13 @@ Profiles are attempted in order and the first success wins; when `capability == 
 | thinking | Sent only to DeepSeek (provider or base URL matches `deepseek`) |
 | temperature | Automatically dropped for reasoning models (`reasoner` / `reasoning` / `r1` / `o1` / `o3` / `o4` / `thinking`) |
 | Local addresses | `localhost` / `127.0.0.1` / `::1` / `0.0.0.0` / `*.local` / `host.docker.internal` / `10.x` / `192.168.x` / `172.16-31.x` / `169.254.x` count as self-hosted: **no key required**, timeout relaxed to 120 s (cloud 45 s) |
-| Base URL normalisation | Appends `/chat/completions` when absent and does not double-append when already present (`endpoint()`) |
+| Base URL normalisation | Appends `/chat/completions` when absent and does not double-append when already present (`endpoint()`, `ai.rs#L104`) |
 | Token cap | `max_tokens = 2000` |
 | System prompt | Requires the literal string "json" and an example structure (a precondition for OpenAI-compatible JSON output) |
 
 ### 7.3 Tolerant output parsing
 
-Model output is frequently malformed (especially from small models), so parsing has two levels (`ai.rs#L228-L356`):
+Model output is frequently malformed (especially from small models), so parsing has two levels (`ai.rs#L318-L445`):
 
 1. **Strict parse**: strip the ``` fence → take the first `{` through the last `}` → `serde_json` into `AiResult`; if the fields are present and non-empty, return it.
 2. **Lenient parse (salvage)**: field aliases — `summary` / `结论` / `总结` / `概述`; `advice` / `建议` / `suggestions`; the category array `categories` / `分类` (at most 12 entries); within an entry `name`/`分类`/`category`, `amount`/`金额`, `share`/`占比`, `verdict`/`评价`/`status`, `comment`/`点评`/`说明`/`reason`; numbers also accept string form.
@@ -413,7 +413,7 @@ Model output is frequently malformed (especially from small models), so parsing 
 
 ### 7.4 Cache and clearing
 
-Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (written by the front end, see `main.js#L3712`); `ai_clear_analyses` deletes everything with the `ai_analysis_` prefix, touching only the cache and never transactions or keys. Whether notes are sent to the AI is controlled by `ai_include_notes`, and first use requires consent via `ai_privacy_accepted`.
+Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (written by the front end, see `main.js#L3750`, `#L3803`); `ai_clear_analyses` deletes everything with the `ai_analysis_` prefix, touching only the cache and never transactions or keys. Whether notes are sent to the AI is controlled by `ai_include_notes`, and first use requires consent via `ai_privacy_accepted`.
 
 ---
 
@@ -459,10 +459,10 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 | Item | Current state |
 |---|---|
 | Schema changes | No migration framework; only whole-table additions (§4.5) |
-| Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L512-L513`); recovery relies on backups |
+| Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L521-L522`); recovery relies on backups |
 | PIN brute-force resistance | No attempt limit and no delay |
 | Import scope | Excludes settings; backups missing newer tables are incompatible |
-| Front-end size | A single 3810-line `main.js` with no module split; readability relies on section comments |
+| Front-end size | A single 4221-line `main.js` with no module split; readability relies on section comments |
 | Query scale | Full load plus front-end filtering; no pagination or virtual list, and very large ledgers (10k+ rows) have not been performance-verified |
 
 **Divergence from the early course documents**: several descriptions in the project's early document set (`ledger document/`, never under version control) no longer match reality and are not carried over here. Three typical cases: (1) its UI spec describes iOS system colours (`#F2F2F7` / `#007AFF` / 24 px corners) while the current theme is a warm neutral paper feel with dark indigo accents, measured in §13; (2) its database document describes a single table while there are five (§4); (3) its test plan claims "editing the date to 400 days ago is always rejected" (now the opposite: re-saving an **unchanged** date is allowed) and "a corrupted data file falls back to an empty ledger", which is not implemented in code.
@@ -474,32 +474,33 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 ```
 ledger/
 ├── src/                          Front end (plain HTML/CSS/JS, no build)
-│   ├── index.html                699 lines · all page structure
-│   ├── styles.css                2353 lines · theme variables and all styling
-│   ├── main.js                   3810 lines · all logic (ES module)
+│   ├── index.html                773 lines · all page structure
+│   ├── styles.css                2461 lines · theme variables and all styling
+│   ├── main.js                   4221 lines · all logic (ES module)
 │   └── vendor/
-│       ├── xlsx.full.min.js      SheetJS 0.20.3, shipped in-repo
+│       ├── xlsx.full.min.js      SheetJS 0.20.3, shipped in-repo (951,904 B)
 │       └── README.md             origin / SHA-256 / upgrade steps
 ├── src-tauri/                    Rust backend
 │   ├── src/
-│   │   ├── main.rs               5 lines · entry point
-│   │   ├── lib.rs                512 lines · 36 command registrations + import/export + startup migration
-│   │   ├── models.rs             35 lines · Transaction / Template / Category
-│   │   ├── db.rs                 98 lines · schema and seed data
-│   │   ├── service.rs            864 lines · business logic
-│   │   ├── keys.rs               301 lines · three-tier API key storage
-│   │   ├── lock.rs               101 lines · app lock
-│   │   └── ai.rs                 679 lines · AI client
+│   │   ├── main.rs               6 lines · entry point
+│   │   ├── lib.rs                571 lines · 36 command registrations + import/export + startup migration
+│   │   ├── models.rs             38 lines · Transaction / Template / Category
+│   │   ├── db.rs                 105 lines · schema and seed data
+│   │   ├── service.rs            947 lines · business logic
+│   │   ├── keys.rs               339 lines · three-tier API key storage
+│   │   ├── lock.rs               118 lines · app lock
+│   │   └── ai.rs                 757 lines · AI client
 │   ├── capabilities/default.json permission declarations (main window only)
 │   ├── icons/                    app icons
 │   ├── gen/android/              Android Gradle project (committed; build output is not)
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           window, CSP and bundling config
 ├── docs/                         screenshots (detail.png / account.png / stats.png)
-├── .trae/                        local development helper directory (not under version control)
+├── .trae/                        local development helper directory (untracked, and NOT ignored by .gitignore)
 ├── README.md                     entry document for users and developers
 ├── ARCHITECTURE.md               this document (Chinese)
 ├── ARCHITECTURE.en.md            this document (English)
+├── CHANGELOG.md                  version history (back-filled from git commits and releases)
 ├── LICENSE                       MIT
 ├── package.json                  one script `tauri`, one devDependency `@tauri-apps/cli`
 ├── package-lock.json
@@ -509,7 +510,9 @@ ledger/
 
 **What is deliberately not committed** (excluded by `.gitignore`): `node_modules/`, `target/`, build output under `src-tauri/gen/android/` (`build` / `.gradle`), APK/AAB/MSI/EXE, Android signing files and credentials, `*.sqlite*` (real ledger data), and local backups and offline document directories.
 
-> The repository currently tracks roughly 93 files; the database file `ledger.sqlite` lives in the OS app data directory, so cloning the repository never brings along any real ledger data.
+> The repository currently tracks 96 files; the database file `ledger.sqlite` lives in the OS app data directory, so cloning the repository never brings along any real ledger data.
+>
+> `.trae/` is a local development helper directory that is currently **not** in the `.gitignore` exclusion list, so it sits permanently in an "untracked" state (`??` in `git status`) and any `git add -A` would stage it along with everything else.
 
 ---
 
@@ -533,7 +536,9 @@ npm run tauri dev              # desktop development (hot reload)
 
 npm run tauri android init     # generate gen/android (first run only; the directory is committed, so clones skip this)
 npm run tauri android dev      # device / emulator debugging
+
 npm run tauri android build    # produce APK / AAB
+npm run android:release:arm64  # convenience script: emits the arm64 release APK directly (see 11.4)
 
 npm run tauri build            # Windows desktop (NSIS / MSI)
 
@@ -633,7 +638,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <alias> -keyalg RSA 
 
 ## 13. UI design language
 
-The theme is **"warm neutral paper + dark indigo accent"** — not any platform's system colours. All values below were measured from `styles.css#L2-L57`.
+The theme is **"warm neutral paper + dark indigo accent"** — not any platform's system colours. All values below were measured from `styles.css#L2-L57` (the light `:root` block); the dark block is at `#L59-L127` in the same file.
 
 ### 13.1 Theme variables (light)
 
@@ -646,7 +651,7 @@ The theme is **"warm neutral paper + dark indigo accent"** — not any platform'
 | Semantic colours | accent `--blue: #58619D` (dark indigo) + `--blue-soft: #EDEEF6`; income `--green: #5E7A63`; danger `--red: #A2605C` (all low-saturation) |
 | Donut segments | `--seg-1: #58619D` / `--seg-2: #8E97B8` / `--seg-3: #9AA88F` / `--seg-4: #C0A98E` / `--seg-5: #D6D2CB` (same low-saturation family) |
 
-Dark mode is supported through two channels simultaneously: `@media (prefers-color-scheme: dark)` (follow the system) and `[data-theme="dark"]` (explicit switch), with explicit light overriding through `[data-theme="light"]`.
+Dark mode is supported through two channels simultaneously: `@media (prefers-color-scheme: dark)` (follow the system, `styles.css#L59-L93`) and `[data-theme="dark"]` (explicit switch, `#L95-L127`), with explicit light overriding through `[data-theme="light"]`.
 
 ### 13.2 Shape and texture
 
@@ -672,6 +677,7 @@ The `icon` / `color` of the 13 preset categories follow `db.rs#L81-L96` (the tab
 | Press bounce | `cubic-bezier(.34,1.56,.64,1)` |
 | List-item entry | `fadeUp .45s cubic-bezier(.2,.8,.2,1)` |
 | Donut stroke | `stroke-dasharray` transition `.85s` |
+| Over-budget reminder card | red warning styling, stays for 3.2 s (the ordinary success card is 1.6 s) |
 
 An overlay's fade-in animation fires **only while `.show` is present**, so every open replays a fresh staggered fade-in.
 
@@ -708,12 +714,13 @@ Stats page
 Category detail page · Settings page · Lock overlay
 ```
 
-### 14.2 The three core flows
+### 14.2 The four core flows
 
 | Flow | Steps |
 |---|---|
 | New entry | Open the sheet → choose type → key in the amount → pick a category → (optional) change the date, add a note → save. Saving is guarded by `savingTx`; in "editing a quick template" state it goes through `update_template` instead |
 | Edit amount | Tap a transaction row → action sheet "Edit amount" → edit keypad → save (`update_amount`) |
+| Edit note | Tap a transaction row → action sheet "Edit note" → edit the input (≤ 30 chars, can be cleared) → save (`update_note`) |
 | Swipe to delete | Swipe a row left → reveal the delete button → confirm (`delete_tx`); batches are handled in multi-select mode |
 
 ### 14.3 State notes
@@ -725,7 +732,7 @@ Category detail page · Settings page · Lock overlay
 | `allPanels` | Panels are registered centrally with shared `show`/`hide` and cancel handling |
 | `viewMonth` | Switching months must call `loadBudget()`; the budget is bound to the month and never carried over silently |
 | Lock `hidden` | The overlay defaults to `display:none` and appears only when JS removes `hidden`; going to the background returns it to the verify state |
-| Search / multi-select | Hides the quick-template row and the budget strip, restoring them on exit |
+| Search / multi-select | Hides the quick-template row and the budget strip, restoring them on exit (the home-page month-over-month delta row is also hidden while searching, so it never contradicts a cross-month filtered figure) |
 
 ---
 
@@ -736,7 +743,7 @@ Category detail page · Settings page · Lock overlay
 | Module | Count | Coverage |
 |---|---:|---|
 | `service.rs` | 7 | Prefix delete treats `_` literally (not as a wildcard), ids stay unique across same-millisecond writes, single-record note edit (trimmed before writing, clearing allowed, 31 chars rejected, missing record errors), delete-category fallback validation (missing/mismatched type both rejected), date window (re-saving an out-of-window date unchanged is allowed while moving it to another out-of-window date is rejected), direction guard for batch re-categorisation, category-name uniqueness within a type |
-| `ai.rs` | 12 (1 ignored) | Fence stripping, plain-JSON parsing, salvaging Chinese keys and string-form advice, rejecting garbage, prompt containing the json keyword and an example, local-address detection, base URL not duplicating the path, thinking sent only to DeepSeek with json-mode degradation, reasoning models dropping temperature, retryable-decision boundaries, end-to-end degradation against a `TcpListener` mock OpenAI server; **ignored**: real TLS connectivity and error mapping (marked "needs network; costs no tokens") |
+| `ai.rs` | 12 (1 ignored) | Fence stripping, plain-JSON parsing, salvaging Chinese keys and string-form advice, rejecting garbage, prompt containing the json keyword and an example, local-address detection, base URL not duplicating the path, thinking sent only to DeepSeek with json-mode degradation, reasoning models dropping temperature, retryable-decision boundaries, end-to-end degradation against a `TcpListener` mock OpenAI server; **ignored**: real TLS connectivity and error mapping (marked "needs network; costs no tokens", `ai.rs#L718`) |
 | `keys.rs` | 3 | Mask does not leak the middle, default database-storage round trip, a local base needs no key while an invalid base URL is rejected |
 | `lock.rs` | 2 | PIN hash round trip (set → verify → disable → always pass), PIN format rules (length / digits only) |
 
@@ -782,6 +789,7 @@ The front end currently has **no automated test framework**. The cases below mus
 | U-12 | App lock | Setting shows a confirmation first; 4–8 digits only (over 8 prompts "密码最多8位数字"); set/confirm require pressing "✓" manually; the unlock state auto-submits when full; going to the background re-locks |
 | U-13 | AI analysis | Without a key a Chinese message appears; with a key the analysis is generated and cached; clearing removes only the analysis cache; copy and layout hold in both themes |
 | U-14 | Theme | Follow-system / explicit dark / explicit light all switch and survive a refresh |
+| U-15 | Month-over-month delta / over-budget reminder | A rise/fall percentage appears under this month's expense (red up, green down, "持平" when the gap is < 0.05%); the row is hidden when last month has no expense or while searching; on launch, if the viewed month is already over budget a centred reminder appears once; a transaction that exactly tips the month into overspending appends the overage to the success toast |
 
 > Divergence from the early course documents: their T-07 has been rewritten to match reality (moving a date to another out-of-window value is still rejected, but re-saving an **unchanged** out-of-window date is allowed — see §5.1), and T-14 "a corrupted data file falls back to an empty ledger" does not exist in the implementation (see §9), so it is dropped and not used as an acceptance case.
 
@@ -811,4 +819,4 @@ The front end currently has **no automated test framework**. The cases below mus
 
 ---
 
-**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.4.0; after code changes, please re-verify the line numbers and measured figures listed here.
+**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.5.0 (commit `1b74e84`); after code changes, please re-verify the line numbers and measured figures listed here.
