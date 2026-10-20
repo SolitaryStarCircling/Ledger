@@ -496,7 +496,7 @@ ledger/
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           window, CSP and bundling config
 ├── docs/                         screenshots (detail.png / account.png / stats.png)
-├── .trae/                        local development helper directory (untracked, and NOT ignored by .gitignore)
+├── .trae/                        local development helper directory (excluded by .gitignore)
 ├── README.md                     entry document for users and developers
 ├── ARCHITECTURE.md               this document (Chinese)
 ├── ARCHITECTURE.en.md            this document (English)
@@ -508,11 +508,11 @@ ledger/
 └── .traeignore / .vscode/
 ```
 
-**What is deliberately not committed** (excluded by `.gitignore`): `node_modules/`, `target/`, build output under `src-tauri/gen/android/` (`build` / `.gradle`), APK/AAB/MSI/EXE, Android signing files and credentials, `*.sqlite*` (real ledger data), and local backups and offline document directories.
+**What is deliberately not committed** (excluded by `.gitignore`): `node_modules/`, `target/`, build output under `src-tauri/gen/android/` (`build` / `.gradle`), APK/AAB/MSI/EXE, Android signing files and credentials, `*.sqlite*` (real ledger data), local backups and offline document directories, and the local development helper directory `.trae/`.
 
 > The repository currently tracks 96 files; the database file `ledger.sqlite` lives in the OS app data directory, so cloning the repository never brings along any real ledger data.
 >
-> `.trae/` is a local development helper directory that is currently **not** in the `.gitignore` exclusion list, so it sits permanently in an "untracked" state (`??` in `git status`) and any `git add -A` would stage it along with everything else.
+> `.trae/` is a local development helper directory, now excluded by `.gitignore`; it never enters version control and no longer shows up as an untracked entry in `git status`.
 
 ---
 

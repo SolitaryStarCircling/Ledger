@@ -496,7 +496,7 @@ ledger/
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           窗口、CSP、打包配置
 ├── docs/                         截图（detail.png / account.png / stats.png）
-├── .trae/                        本地开发辅助目录（未被 .gitignore 忽略，处于未跟踪状态）
+├── .trae/                        本地开发辅助目录（已由 .gitignore 排除）
 ├── README.md                     面向使用者与开发者的入口文档
 ├── ARCHITECTURE.md               本文件
 ├── ARCHITECTURE.en.md            英文版
@@ -508,11 +508,11 @@ ledger/
 └── .traeignore / .vscode/
 ```
 
-**不入库的东西**（`.gitignore` 明确排除）：`node_modules/`、`target/`、`src-tauri/gen/android/` 下的编译产物（`build` / `.gradle`）、APK/AAB/MSI/EXE、Android 签名文件与凭据、`*.sqlite*`（真实账目）、本地备份与离线文档目录。
+**不入库的东西**（`.gitignore` 明确排除）：`node_modules/`、`target/`、`src-tauri/gen/android/` 下的编译产物（`build` / `.gradle`）、APK/AAB/MSI/EXE、Android 签名文件与凭据、`*.sqlite*`（真实账目）、本地备份与离线文档目录、本地开发辅助目录 `.trae/`。
 
 > 仓库当前受版本控制的文件 96 个；数据库文件 `ledger.sqlite` 由系统应用数据目录承载，克隆仓库不会带上任何真实账目。
 >
-> `.trae/` 是本地开发辅助目录，目前**不在** `.gitignore` 排除清单内，因此它一直是「未跟踪」状态（`git status` 里显示为 `??`），任何一次 `git add -A` 都会把它一并纳入暂存区。
+> `.trae/` 是本地开发辅助目录，已在 `.gitignore` 中排除，不会进入版本控制，也不再以未跟踪状态出现在 `git status` 里。
 
 ---
 
