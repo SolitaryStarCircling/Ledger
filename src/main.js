@@ -1965,33 +1965,39 @@ $('#weekPickerList').addEventListener('click', e => {
   if (cb) cb(ds);
 });
 
-/* ================= 天选择器 ================= */
+/* ================= 天选择器 =================
+   只列出账本里「确实有记录」的日期（去重倒序），不再限制近 12 天，
+   这样任何有数据的日期都能被选中，查看当天的结余与收支。
+   每行右侧直接显示当天支出/收入，便于挑日期。 */
 function openDayPicker(currentDate, onPick) {
-  const today = new Date();
   const curDs = fmtDate(currentDate);
-  const todayDs = fmtDate(today);
-  const yesterdayDs = fmtDate(addDays(today, -1));
 
-  const days = [];
-  for (let i = 12; i >= -3; i--) {
-    days.push(addDays(today, -i));
+  const byDay = {};
+  txs.forEach(t => {
+    const e = byDay[t.date] || (byDay[t.date] = { expense: 0, income: 0 });
+    if (t.type === 'income') e.income += t.amount;
+    else e.expense += t.amount;
+  });
+  const dates = Object.keys(byDay).sort((a, b) => b.localeCompare(a));
+
+  const listEl = $('#dayPickerList');
+  if (!dates.length) {
+    listEl.innerHTML = '<div class="picker-empty">还没有任何记录</div>';
+  } else {
+    listEl.innerHTML = dates.map(ds => {
+      const e = byDay[ds];
+      const parts = [];
+      if (e.expense) parts.push('支出 ' + fmtMoneyShort(e.expense));
+      if (e.income) parts.push('收入 ' + fmtMoneyShort(e.income));
+      return `<div class="picker-item ${ds === curDs ? 'active' : ''}" data-date="${ds}">
+        <span>${dayLabel(ds)}</span>
+        <span class="pick-right">
+          <span class="pick-sum">${parts.join(' · ')}</span>
+          <span class="check">✓</span>
+        </span>
+      </div>`;
+    }).join('');
   }
-
-  const WEEK = ['日','一','二','三','四','五','六'];
-  $('#dayPickerList').innerHTML = days.map(d => {
-    const ds = fmtDate(d);
-    let label;
-    if (ds === todayDs) label = '今日';
-    else if (ds === yesterdayDs) label = '昨日';
-    else {
-      const wd = WEEK[d.getDay()];
-      label = (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + wd;
-    }
-    return `<div class="picker-item ${ds === curDs ? 'active' : ''}" data-date="${ds}">
-      <span>${label}</span>
-      <span class="check">✓</span>
-    </div>`;
-  }).join('');
 
   dayPickerCallback = onPick;
   openModal(dayPickerSheet);

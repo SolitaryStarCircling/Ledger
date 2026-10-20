@@ -15,6 +15,25 @@
 
 ---
 
+## [1.6.0] — 2026-10-20
+
+提交链接（本条目提交后回填） · tag [`v1.6.0`](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.6.0)。以下改动由 `git diff` 逐条核对得出。
+
+**新增**
+
+- **财报「结余范围 → 天」的日期选择改为「有数据就能选」**：原来「天」这一档打开的是写死的「近 12 天 / 未来 3 天」列表，账本里更早的日期根本选不到。现在一律扫描全部流水、聚合出**确实有记录**的日期（去重、倒序、最新在前），因此任何有数据的日期都能被选中，查看当天的结余与收支；每行右侧直接显示当天「支出 ¥X · 收入 ¥Y」，账本为空时给出空态提示。周 / 月两档维持原有窗口不变
+
+**工程化**
+
+- `openDayPicker` 不再依赖 `new Date()` 推算固定天数窗口（删掉 `todayDs` / `yesterdayDs` / `WEEK` 与取数循环），改为从 `txs` 聚合；日期文案复用既有 `dayLabel()`（跨年自动补年份），金额复用 `fmtMoneyShort()`
+- 面板标题由「选择日期（往前 12 天 / 往后 3 天）」改为「选择日期（仅列出有记录的日期）」；`styles.css` 新增 `.picker-item .pick-right` / `.pick-sum` / `.picker-empty`（选中态金额随主色）
+
+**版本号**：`1.5.5` → `1.6.0`（`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock` 四处同步）
+
+**对应代码改动**：`src/main.js` +29/−23、`src/index.html` +1/−1、`src/styles.css` +4
+
+---
+
 ## [1.5.5] — 2026-10-20
 
 提交链接 [b952672](https://github.com/SolitaryStarCircling/Ledger/commit/b952672) · tag [`v1.5.5`](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.5.5)。以下改动截至 2026-10-20，由 `git diff` 逐条核对得出。

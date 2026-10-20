@@ -1517,6 +1517,10 @@ html, body {
 .picker-item.active { color: var(--blue); font-weight: 600; }
 .picker-item .check { opacity: 0; color: var(--blue); font-weight: 700; }
 .picker-item.active .check { opacity: 1; }
+.picker-item .pick-right { display: flex; align-items: center; gap: 10px; }
+.picker-item .pick-sum { color: var(--text3); font-size: 13px; font-weight: 400; }
+.picker-item.active .pick-sum { color: var(--blue); }
+.picker-empty { padding: 26px 18px; text-align: center; font-size: 14px; color: var(--text3); }
 
 .toast {
   position: absolute;

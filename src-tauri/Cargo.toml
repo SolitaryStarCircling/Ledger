@@ -1,6 +1,6 @@
 [package]
 name = "ledger"
-version = "1.5.5"
+version = "1.6.0"
 description = "3 秒记一笔 · 完全离线的个人记账本（Tauri v2 桌面 + Android）"
 authors = ["SolitaryStarCircling"]
 edition = "2021"

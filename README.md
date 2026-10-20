@@ -37,7 +37,7 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 
 **统计**
 
-- 年 / 月 / 周 / 天四种周期切换（周起点为周一）
+- 年 / 月 / 周 / 天四种周期切换（周起点为周一）；选「天」时日期列表只列账本中**有记录**的日期，可直接查任意某天的结余与收支
 - 圆环图展示分类支出占比，下方按金额降序排列分类明细
 - 明细页顶部展示本月支出**较上月环比**（上月无支出记录时自动隐藏）
 - 结余 = 收入 − 支出，正负分色显示
@@ -75,7 +75,7 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 | 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
 | 后端 | Rust (edition 2021) | — | 8 个模块，注册 **36 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
-| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4461 行、`styles.css` 2470 行、`index.html` 773 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
+| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4467 行、`styles.css` 2474 行、`index.html` 773 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
 | 密码哈希 | argon2（Argon2id，纯 Rust） | 0.5 | 应用锁 PIN 哈希，无 C 依赖 |
