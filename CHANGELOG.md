@@ -17,7 +17,7 @@
 
 ## [1.7.0] — 2026-10-26
 
-提交链接待提交后回填 · tag 待发布。以下改动由 `git diff` 逐条核对得出。
+提交链接 [3cd9df0](https://github.com/SolitaryStarCircling/Ledger/commit/3cd9df0) · tag [v1.7.0](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.7.0)。以下改动由 `git diff` 逐条核对得出。
 
 **新增**
 
