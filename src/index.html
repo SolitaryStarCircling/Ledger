@@ -67,6 +67,51 @@
       <div id="txList"></div>
     </section>
 
+    <!-- 记录详情页（点明细分录进入） -->
+    <section class="page" id="page-txdetail">
+      <div class="cd-header">
+        <button class="cd-back" id="txDetailBack" aria-label="返回">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="cd-title"><span id="txdHeaderTitle">账目详情</span></div>
+        <div class="cd-period" id="txdHeaderPeriod"></div>
+      </div>
+
+      <div class="txd-hero">
+        <div class="txd-amount" id="txdAmount" role="button" tabindex="0">-¥0.00</div>
+        <div class="txd-type" id="txdType" role="button" tabindex="0">支出</div>
+      </div>
+
+      <div class="txd-card">
+        <div class="txd-row" id="txdRowCat" role="button" tabindex="0">
+          <div class="txd-label">分类</div>
+          <div class="txd-value">
+            <span class="txd-cat-ic" id="txdCatIcon"></span>
+            <span id="txdCatName"></span>
+          </div>
+          <span class="txd-chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+        </div>
+        <div class="txd-row" id="txdRowDate" role="button" tabindex="0">
+          <div class="txd-label">记录时间</div>
+          <div class="txd-value txd-stack">
+            <span id="txdDate"></span>
+            <span class="txd-sub" id="txdCreated" hidden></span>
+          </div>
+          <span class="txd-chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+        </div>
+        <div class="txd-row" id="txdRowNote" role="button" tabindex="0">
+          <div class="txd-label">备注</div>
+          <div class="txd-value" id="txdNote"></div>
+          <span class="txd-chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+        </div>
+      </div>
+
+      <div class="txd-actions">
+        <button class="txd-btn danger" id="txdDelete">删除</button>
+        <button class="txd-btn primary" id="txdEdit">编辑</button>
+      </div>
+    </section>
+
     <!-- 统计页 -->
     <section class="page" id="page-stats">
       <div class="settings-header">
@@ -411,7 +456,7 @@
       <button class="date-btn" id="dateBtn"></button>
       <input class="note-input" id="noteInput" type="text" placeholder="添加备注…" maxlength="30">
 
-      <div class="fav-row">
+      <div class="fav-row" id="favRow">
         <button class="fav-btn" id="favBtn">
           <span class="fav-star" id="favStar">☆</span><span id="favText">收藏为常用</span>
         </button>
@@ -442,14 +487,6 @@
   <!-- 记录操作弹层 -->
   <div class="modal-mask" id="modalMask"></div>
 
-  <div class="action-sheet" id="actionSheet">
-    <div class="action-head" id="actionHead">记录</div>
-    <button class="action-btn" data-act="edit">修改</button>
-    <button class="action-btn" data-act="multi">多选</button>
-    <button class="action-btn danger" data-act="delete">删除</button>
-    <button class="action-btn cancel" data-act="cancel">取消</button>
-  </div>
-
   <div class="action-sheet" id="tplSheet">
     <div class="action-head" id="tplHead">常用项</div>
     <button class="action-btn" data-act="tplEdit">修改</button>
@@ -463,18 +500,11 @@
     <button class="action-btn cancel" data-act="cancel">取消</button>
   </div>
 
-  <div class="action-sheet" id="editTypeSheet">
-    <div class="action-head">要修改哪一项？</div>
-    <button class="action-btn" data-act="editAmount">修改金额</button>
-    <button class="action-btn" data-act="editDate">修改时间</button>
-    <button class="action-btn" data-act="editNote">修改备注</button>
-    <button class="action-btn cancel" data-act="cancel">取消</button>
-  </div>
-
-  <div class="action-sheet" id="editAmountSheet">
+  <!-- 详情页：修改金额 -->
+  <div class="action-sheet" id="txdAmountSheet">
     <div class="action-head">修改金额</div>
-    <div class="edit-amount-display" id="editAmountDisplay">¥0</div>
-    <div class="edit-keypad" id="editKeypad">
+    <div class="edit-amount-display" id="txdAmountDisplay">¥0</div>
+    <div class="edit-keypad" id="txdAmountKeypad">
       <button data-k="1">1</button>
       <button data-k="2">2</button>
       <button data-k="3">3</button>
@@ -494,7 +524,27 @@
     </div>
     <div class="edit-actions">
       <button class="action-btn cancel" data-act="cancel">取消</button>
-      <button class="action-btn primary" id="editAmountSave">保存</button>
+      <button class="action-btn primary" id="txdAmountSave">保存</button>
+    </div>
+  </div>
+
+  <!-- 详情页：修改类型 -->
+  <div class="action-sheet" id="txdTypeSheet">
+    <div class="action-head">修改类型</div>
+    <button class="action-btn" data-type="expense">支出</button>
+    <button class="action-btn" data-type="income">收入</button>
+    <button class="action-btn cancel" data-act="cancel">取消</button>
+  </div>
+
+  <!-- 详情页：修改备注 -->
+  <div class="action-sheet" id="txdNoteSheet">
+    <div class="action-head">修改备注</div>
+    <div class="txd-field-body">
+      <input class="note-input" id="txdNoteInput" type="text" placeholder="添加备注…" maxlength="30" autocomplete="off">
+    </div>
+    <div class="edit-actions">
+      <button class="action-btn cancel" data-act="cancel">取消</button>
+      <button class="action-btn primary" id="txdNoteSave">保存</button>
     </div>
   </div>
 
@@ -522,24 +572,6 @@
     <div class="edit-actions">
       <button class="action-btn cancel" data-act="cancel">取消</button>
       <button class="action-btn primary" id="budgetSave">保存</button>
-    </div>
-  </div>
-
-  <div class="action-sheet" id="editNoteSheet">
-    <div class="action-head">修改备注</div>
-    <input class="note-input" id="editNoteInput" type="text" placeholder="添加备注…" maxlength="30">
-    <div class="edit-actions">
-      <button class="action-btn cancel" data-act="cancel">取消</button>
-      <button class="action-btn primary" id="editNoteSave">保存</button>
-    </div>
-  </div>
-
-  <div class="action-sheet" id="editDateSheet">
-    <div class="action-head">修改时间（前后一年）</div>
-    <div class="edit-date-list" id="editDateList"></div>
-    <div class="edit-actions">
-      <button class="action-btn cancel" data-act="cancel">取消</button>
-      <button class="action-btn primary" id="editDateSave">保存</button>
     </div>
   </div>
 

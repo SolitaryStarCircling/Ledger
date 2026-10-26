@@ -1,3 +1,30 @@
+/* =============================================================================
+ * main.js · 前端全部逻辑（原生 ES Module 单文件，零框架 / 零构建 / 零打包）
+ * -----------------------------------------------------------------------------
+ * 分区导航（用下方同名「===== 分区名 =====」注释锚点搜索；刻意不写行号，
+ * 避免改动代码后整张导航失效）：
+ *   1  数据层                分类缓存、分类加载、流水刷新
+ *   2  工具                  日期 / 金额格式化、Toast、预算提示
+ *   3  搜索状态              搜索态判定、查询归一
+ *   4  首页渲染              月流水分组、汇总、环比、静默重绘
+ *   5  一次性手势提示        首次进入的侧滑教学
+ *   6  侧滑删除              手势、删除、原地修补 patchAfterDelete
+ *   7  批量选择分类          多选、批量改分类
+ *   8  分类管理              分类增删改、排序、自动分类规则
+ *   9  快捷记账模板          常用项胶囊、长按菜单、重复校验
+ *  10  月度预算              预算读写、超支提醒
+ *  11  弹层系统              面板注册与开关、返回栈（uiLayers / syncBackState）
+ *  12  记录详情 / 编辑      单击进入详情页、整条编辑、单条删除
+ *  13  月份与周期选择        月 / 周 / 天选择器、切月、搜索交互
+ *  14  统计与财报            圆环图、趋势、分类明细、AI 视图切换、Tab
+ *  15  记账面板              数字键盘、分类网格、日历、保存
+ *  16  数据导入导出          Excel / CSV / SQLite、账单解析、自动归类
+ *  17  设置与 AI             设置页、AI 服务商 / Key、分析结果
+ *  18  主题 / 应用锁 / 启动
+ * -----------------------------------------------------------------------------
+ * 约定：新增功能归入现有分区，优先复用分区 2 的工具函数；跨分区共享的状态
+ * 在所属分区顶部集中声明并注明「全局」，不要散落在函数之间。
+ * ========================================================================== */
 const { invoke } = window.__TAURI__.core;
 
 /* ================= 数据层 ================= */
@@ -475,7 +502,7 @@ function bindSwipe(row) {
     if (selectMode) { toggleSelect(row.dataset.id); return; }
     if (closedOther) return;                    // 这一下只用于收起别的行的侧滑
     if (row.dataset.open) { closeRow(row); return; }
-    showActionSheet(row.dataset.id);
+    openTxDetail(row.dataset.id);
   };
 
   const fireTap = () => {
@@ -830,7 +857,17 @@ $('#selectCatBtn').addEventListener('click', openBatchCat);
 
 $('#batchCatSheet').addEventListener('click', e => {
   const item = e.target.closest('.cat-item');
-  if (item) { applyBatchCat(item.dataset.id); return; }
+  if (item) {
+    // 详情页单条改分类：取出上下文后再关面板（closeModal 会清空 txdCatCtx）
+    const ctx = txdCatCtx;
+    if (ctx) {
+      closeModal();
+      applyDetailCategory(ctx, item.dataset.id);
+    } else {
+      applyBatchCat(item.dataset.id);
+    }
+    return;
+  }
   const btn = e.target.closest('button');
   if (btn && btn.dataset.act === 'cancel') closeModal();
 });
@@ -967,7 +1004,7 @@ $('#catManageSheet').addEventListener('click', async e => {
 });
 
 /* 分类编辑面板交互 */
-/* ===== 自动分类规则 ===== */
+/* ================= 自动分类规则 ================= */
 function renderCatRuleCat() {
   // 下拉框列全部支出分类（含兜底 other），并保留当前选项
   const sel = $('#catRuleCat');
@@ -1158,6 +1195,8 @@ function findFavTemplate() {
 function updateFavState() {
   const btn = $('#favBtn');
   const hint = $('#favHint');
+  // 编辑账目时整行隐藏：收藏动作只属于「新建账单」
+  $('#favRow').hidden = !!editingTxId;
   if (editingTemplateId) {
     btn.hidden = true;
     hint.hidden = false;
@@ -1484,11 +1523,6 @@ $('#budgetClear').addEventListener('click', async () => {
 
 /* ================= 弹层系统 ================= */
 const modalMask      = $('#modalMask');
-const actionSheet    = $('#actionSheet');
-const editTypeSheet  = $('#editTypeSheet');
-const editAmountSheet = $('#editAmountSheet');
-const editDateSheet  = $('#editDateSheet');
-const editNoteSheet  = $('#editNoteSheet');
 const confirmBox     = $('#confirmBox');
 const monthPickerSheet = $('#monthPickerSheet');
 const weekPickerSheet  = $('#weekPickerSheet');
@@ -1508,17 +1542,22 @@ const lockEnableSheet  = $('#lockEnableSheet');
 const catRuleSheet     = $('#catRuleSheet');
 const exportFormatSheet= $('#exportFormatSheet');
 const importFormatSheet= $('#importFormatSheet');
-const allPanels = [actionSheet, editTypeSheet, editAmountSheet, editDateSheet, editNoteSheet,
-                   monthPickerSheet, weekPickerSheet, dayPickerSheet, batchCatSheet, budgetSheet,
+const txdAmountSheet   = $('#txdAmountSheet');
+const txdTypeSheet     = $('#txdTypeSheet');
+const txdNoteSheet     = $('#txdNoteSheet');
+const allPanels = [monthPickerSheet, weekPickerSheet, dayPickerSheet, batchCatSheet, budgetSheet,
                    tplSheet, calSheet, catManageSheet, catEditSheet, aiKeySheet, aiProviderSheet,
-                   periodSheet, lockManageSheet, lockConfirmSheet, lockEnableSheet, catRuleSheet, exportFormatSheet, importFormatSheet];
+                   periodSheet, lockManageSheet, lockConfirmSheet, lockEnableSheet, catRuleSheet, exportFormatSheet, importFormatSheet,
+                   txdAmountSheet, txdTypeSheet, txdNoteSheet];
 
 let activePanel = null;
 let modalOpenedAt = 0;   // 弹层打开时刻，用于忽略紧随其后的「幽灵 click」
 let sheetOpenedAt = 0;
-let targetTxId = null;
-let editAmountStr = '0';
-let editDateStr = todayStr();
+let txDetailId = null;        // 全局：当前详情页展示的记录 id
+let txDetailOrigin = 'home';  // 全局：详情页来源页，决定返回去向
+let txdCatCtx = null;         // 非空 = 分类面板在为详情页单条记录服务 { id, type }
+let calDetailTxId = null;     // 非空 = 日历面板在为详情页改日期
+let txdAmountStr = '0';       // 详情页金额面板的输入串
 
 let monthPickerCallback = null;
 let weekPickerCallback = null;
@@ -1536,7 +1575,8 @@ function openModal(panel) {
 
 /* 新增的三个面板（API Key / 服务商 / 结余范围）的「取消」按钮：
    它们不像老面板那样各自绑过 data-act="cancel"，这里统一补上，否则点了没反应 */
-[aiKeySheet, aiProviderSheet, periodSheet, catRuleSheet, exportFormatSheet, importFormatSheet].forEach(p => {
+[aiKeySheet, aiProviderSheet, periodSheet, catRuleSheet, exportFormatSheet, importFormatSheet,
+ txdAmountSheet, txdTypeSheet, txdNoteSheet].forEach(p => {
   if (!p) return;
   p.addEventListener('click', e => {
     if (e.target.closest('[data-act="cancel"]')) closeModal();
@@ -1552,6 +1592,10 @@ function closeModal() {
   monthPickerCallback = null;
   weekPickerCallback = null;
   dayPickerCallback = null;
+  txdCatCtx = null;
+  calDetailTxId = null;
+  txdAmountStr = '0';
+  $('#txdNoteInput').blur();
   syncBackState();
 }
 
@@ -1570,11 +1614,19 @@ function closeModal() {
 function uiLayers() {
   const page = ($('.page.active') || {}).id;
   const layers = [];
-  if (page === 'page-catdetail') layers.push('stats', 'catdetail');  // 明细页的入口在财报页
+  if (page === 'page-txdetail') {
+    // 详情页的入口可能是首页或分类明细页，来源层必须先垫上
+    if (txDetailOrigin === 'catdetail') layers.push('stats', 'catdetail');
+    layers.push('txdetail');
+  }
+  else if (page === 'page-catdetail') layers.push('stats', 'catdetail');  // 明细页的入口在财报页
   else if (page === 'page-stats') layers.push('stats');
   else if (page === 'page-settings') layers.push('settings');
   if (page === 'page-stats' && statsView === 'ai') layers.push('ai');
-  if (page === 'page-home' && $('#searchBar').classList.contains('show')) layers.push('search');
+  // 搜索框在首页上；从搜索结果进详情时它仍处于展开态，返回后要能继续停在搜索结果
+  const searching = $('#searchBar').classList.contains('show')
+    && (page === 'page-home' || (page === 'page-txdetail' && txDetailOrigin === 'home'));
+  if (searching) layers.push('search');
   if (selectMode) layers.push('select');
   if (sheet.classList.contains('show')) layers.push('sheet');
   if (activePanel) layers.push('modal');
@@ -1640,6 +1692,7 @@ function undoTopLayer() {
   if (top === 'select') { exitSelect(); return true; }
   if (top === 'search') { closeSearch(); return true; }
   if (top === 'ai') { setStatsView('chart'); return true; }
+  if (top === 'txdetail') { closeTxDetail(); return true; }   // 退回打开详情前的来源页
   if (top === 'catdetail') { closeCatDetail(); return true; }   // 退回财报页
   if (top === 'stats' || top === 'settings') { switchTab('home'); return true; }
   return false;
@@ -1664,188 +1717,271 @@ window.addEventListener('popstate', e => {
   }
 });
 
-/* ================= 记录操作菜单 ================= */
-function showActionSheet(id) {
+/* ================= 记录详情 / 编辑 ================= */
+const WEEK_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/** 单击流水行进入整页详情。来源页决定返回去向（首页 / 分类明细页）。 */
+function openTxDetail(id) {
   const tx = txs.find(t => String(t.id) === String(id));
   if (!tx) {
-    // 以前这里静默返回，出问题时完全看不出发生了什么
     toast('这条记录已不存在，请重新打开页面');
     return;
   }
-  targetTxId = id;
+  txDetailId = id;
+  txDetailOrigin = $('#page-catdetail').classList.contains('active') ? 'catdetail' : 'home';
+  renderTxDetail();
+  ['page-home', 'page-stats', 'page-catdetail', 'page-txdetail'].forEach(pid => {
+    $('#' + pid).classList.toggle('active', pid === 'page-txdetail');
+  });
+  window.scrollTo(0, 0);
+  syncBackState();
+}
+
+function renderTxDetail() {
+  const tx = txs.find(t => String(t.id) === String(txDetailId));
+  if (!tx) { closeTxDetail(); toast('这条记录已不存在'); return; }
+
   const cat = CAT_MAP[tx.category] || DEFAULT_CAT;
-  const sign = tx.type === 'income' ? '+' : '-';
-  $('#actionHead').innerHTML = `${cat.icon}<span>${escapeHtml(cat.name)}　${sign}${fmtMoney(tx.amount)}</span>`;
-  openModal(actionSheet);
+  const isExpense = tx.type === 'expense';
+
+  const amountEl = $('#txdAmount');
+  amountEl.textContent = (isExpense ? '-' : '+') + fmtMoney(tx.amount);
+  amountEl.classList.toggle('income', !isExpense);
+
+  const typeEl = $('#txdType');
+  typeEl.textContent = isExpense ? '支出' : '收入';
+  typeEl.classList.toggle('income', !isExpense);
+
+  const iconEl = $('#txdCatIcon');
+  iconEl.innerHTML = cat.icon;
+  iconEl.style.color = cat.color || '';
+  $('#txdCatName').textContent = cat.name;
+
+  $('#txdDate').textContent = tx.date + ' ' + WEEK_CN[parseDate(tx.date).getDay()];
+  const created = Number(tx.createdAt) || 0;
+  const createdEl = $('#txdCreated');
+  createdEl.hidden = !created;
+  if (created) createdEl.textContent = '录入于 ' + fmtDateTime(created);
+
+  const noteEl = $('#txdNote');
+  noteEl.textContent = tx.note || '无';
+  noteEl.classList.toggle('empty', !tx.note);
 }
 
-function showEditType() { openModal(editTypeSheet); }
+function closeTxDetail() {
+  txDetailId = null;
+  txdCatCtx = null;
+  calDetailTxId = null;
+  $('#page-txdetail').classList.remove('active');
+  const back = txDetailOrigin === 'catdetail' ? '#page-catdetail' : '#page-home';
+  $(back).classList.add('active');
+  syncBackState();
+}
 
-function showEditAmount() {
-  const tx = txs.find(t => String(t.id) === String(targetTxId));
+$('#txDetailBack').addEventListener('click', closeTxDetail);
+
+$('#txdEdit').addEventListener('click', () => {
+  const tx = txs.find(t => String(t.id) === String(txDetailId));
+  if (!tx) { toast('这条记录已不存在'); return; }
+  openEditSheet(tx);
+});
+
+$('#txdDelete').addEventListener('click', showConfirmDelete);
+
+/* ---- 详情页字段单击修改：金额 / 类型 / 分类 / 日期 / 备注 ---- */
+
+function currentDetailTx() {
+  const tx = txs.find(t => String(t.id) === String(txDetailId));
+  if (!tx) toast('这条记录已不存在');
+  return tx || null;
+}
+
+/** 字段保存后的统一刷新：首页 / 财报 / 记录数 / 详情页 / 来源分类明细页 */
+async function afterTxFieldSaved(savedDate) {
+  await refreshTxs();
+  const ym = savedDate.slice(0, 7);
+  if (ym !== viewMonth && !searchQuery) { viewMonth = ym; await loadBudget(); }
+  renderHome(true);
+  renderStats(true);
+  if (txDetailId) {
+    renderTxDetail();
+    if (txDetailOrigin === 'catdetail') renderCatDetail(curCatId, curCatType, true);
+  }
+  updateRecordCount();
+  toast('已修改');
+}
+
+/* 金额：键盘面板 + 保存 */
+function renderTxdAmount() {
+  $('#txdAmountDisplay').textContent = '¥' + txdAmountStr;
+}
+
+function openDetailAmount() {
+  const tx = currentDetailTx();
   if (!tx) return;
-  editAmountStr = String(tx.amount);
-  if (editAmountStr.endsWith('.0')) editAmountStr = editAmountStr.slice(0, -2);
-  updateEditAmountDisplay();
-  openModal(editAmountSheet);
+  txdAmountStr = String(tx.amount).replace(/\.00$/, '');
+  renderTxdAmount();
+  openModal(txdAmountSheet);
 }
 
-function updateEditAmountDisplay() {
-  $('#editAmountDisplay').textContent = '¥' + editAmountStr;
-}
-
-$('#editKeypad').addEventListener('click', e => {
+$('#txdAmountKeypad').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
-  const k = btn.dataset.k;
-  if (k === 'del') {
-    editAmountStr = editAmountStr.length > 1 ? editAmountStr.slice(0, -1) : '0';
-    if (editAmountStr === '') editAmountStr = '0';
-  } else if (k === '.') {
-    if (!editAmountStr.includes('.')) editAmountStr += '.';
-  } else {
-    if (editAmountStr === '0') {
-      editAmountStr = k;
-    } else {
-      const parts = editAmountStr.split('.');
-      if (parts[1] !== undefined && parts[1].length >= 2) return;
-      if (parts[0].length >= 9 && parts[1] === undefined) return;
-      editAmountStr += k;
-    }
-  }
-  updateEditAmountDisplay();
+  txdAmountStr = computeKeypad(txdAmountStr, btn.dataset.k);
+  renderTxdAmount();
 });
 
-$('#editAmountSave').addEventListener('click', async () => {
-  const amt = parseFloat(editAmountStr);
+$('#txdAmountSave').addEventListener('click', async () => {
+  const tx = currentDetailTx();
+  if (!tx) { closeModal(); return; }
+  const amt = parseFloat(txdAmountStr);
   if (!amt || amt <= 0) {
-    $('#editAmountDisplay').style.color = 'var(--red)';
-    setTimeout(() => $('#editAmountDisplay').style.color = '', 400);
+    const box = $('#txdAmountDisplay');
+    box.classList.remove('shake');
+    void box.offsetWidth;
+    box.classList.add('shake');
+    toast('金额需大于 0');
     return;
   }
+  if (amt === Number(tx.amount)) { closeModal(); return; }
+  closeModal();
   try {
-    await invoke('update_amount', { id: String(targetTxId), amount: editAmountStr });
-    await refreshTxs();
-    renderHome(true);
-    renderStats(true);
-    toast('金额已修改');
+    await invoke('update_amount', { id: String(tx.id), amount: txdAmountStr });
+    await afterTxFieldSaved(tx.date);
   } catch (e) {
     toast('修改失败：' + e);
   }
-  closeModal();
 });
 
-function showEditDate() {
-  const tx = txs.find(t => String(t.id) === String(targetTxId));
+/* 类型：选另一类型后必须先选该类型的分类，避免类型与分类方向不一致 */
+function openDetailType() {
+  if (!currentDetailTx()) return;
+  openModal(txdTypeSheet);
+}
+
+txdTypeSheet.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-type]');
+  if (!btn) return;
+  const tx = currentDetailTx();
+  if (!tx) { closeModal(); return; }
+  if (btn.dataset.type === tx.type) { closeModal(); return; }
+  openDetailCat(tx.id, btn.dataset.type);
+});
+
+/* 分类：复用批量改分类面板，只渲染目标类型的分类 */
+function openDetailCat(id, type) {
+  const tx = txs.find(t => String(t.id) === String(id));
+  if (!tx) { toast('这条记录已不存在'); return; }
+  const targetType = type || tx.type;
+  txdCatCtx = { id: tx.id, type: targetType };
+  $('#batchCatHead').textContent = targetType === tx.type
+    ? '改分类'
+    : `改为${targetType === 'income' ? '收入' : '支出'} · 选择分类`;
+  $('#batchCatBody').innerHTML = `<div class="cat-grid">${(CATEGORIES[targetType] || []).map(c => `
+      <button class="cat-item" data-id="${c.id}" style="--c:${c.color}">
+        <span class="ic">${c.icon}</span><span>${escapeHtml(c.name)}</span>
+      </button>`).join('')}</div>`;
+  openModal(batchCatSheet);
+}
+
+function openDetailCatRow() {
+  const tx = currentDetailTx();
   if (!tx) return;
-  editDateStr = tx.date;
-  renderEditDateList();
-  openModal(editDateSheet);
-  setTimeout(() => {
-    const list = $('#editDateList');
-    const activeItem = list.querySelector('.edit-date-item.active');
-    if (activeItem) {
-      list.scrollTop = activeItem.offsetTop - list.clientHeight / 2 + activeItem.clientHeight / 2;
-    }
-  }, 60);
+  openDetailCat(tx.id, tx.type);
 }
 
-function renderEditDateList() {
-  const today = new Date();
-  const days = [];
-  for (let i = 365; i >= -365; i--) {
-    days.push(fmtDate(addDays(today, -i)));
-  }
-  if (!days.includes(editDateStr)) {
-    days.push(editDateStr);
-    days.sort();
-  }
-
-  let html = '';
-  let lastYM = '';
-  days.forEach(ds => {
-    const ym = ds.slice(0, 7);
-    if (ym !== lastYM) {
-      lastYM = ym;
-      const [y, m] = ym.split('-').map(Number);
-      html += `<div class="date-month-header">${y}年${m}月</div>`;
-    }
-    let label;
-    if (ds === todayStr()) label = '今日';
-    else if (ds === fmtDate(addDays(new Date(), -1))) label = '昨日';
-    else {
-      const d = parseDate(ds);
-      label = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日';
-    }
-    html += `<div class="edit-date-item ${ds === editDateStr ? 'active' : ''}" data-date="${ds}">
-      <span>${label}</span>
-      <span class="check">✓</span>
-    </div>`;
-  });
-  $('#editDateList').innerHTML = html;
-}
-
-$('#editDateList').addEventListener('click', e => {
-  const item = e.target.closest('.edit-date-item');
-  if (!item) return;
-  editDateStr = item.dataset.date;
-  $$('#editDateList .edit-date-item').forEach(i => i.classList.toggle('active', i === item));
-});
-
-$('#editDateSave').addEventListener('click', async () => {
+/** 详情页改分类（ctx.type 与记录不同时即「改类型 + 分类」） */
+async function applyDetailCategory(ctx, catId) {
+  const tx = txs.find(t => String(t.id) === String(ctx.id));
+  if (!tx) { toast('这条记录已不存在'); return; }
+  if (ctx.type === tx.type && catId === tx.category) return;
   try {
-    await invoke('update_date', { id: String(targetTxId), date: editDateStr });
-    await refreshTxs();
-    const newYM = editDateStr.slice(0, 7);
-    if (newYM !== viewMonth) { viewMonth = newYM; await loadBudget(); }
-    renderHome(true);
-    renderStats(true);
-    toast('时间已修改');
+    await invoke('update_tx', {
+      id: String(tx.id),
+      txType: ctx.type,
+      amount: String(tx.amount),
+      category: catId,
+      note: tx.note || '',
+      date: tx.date,
+    });
+    await afterTxFieldSaved(tx.date);
   } catch (e) {
     toast('修改失败：' + e);
   }
-  closeModal();
-});
+}
 
-/* ================= 单条记录：修改备注 ================= */
-function showEditNote() {
-  const tx = txs.find(t => String(t.id) === String(targetTxId));
+/* 日期：复用日历面板，范围与「编辑」一致（前后一年 + 原日期所在月） */
+function openDetailCal() {
+  const tx = currentDetailTx();
   if (!tx) return;
-  const input = $('#editNoteInput');
+  curDate = tx.date;
+  calDetailTxId = tx.id;
+  const d = parseDate(tx.date);
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  renderCal();
+  openModal(calSheet);
+}
+
+async function applyDetailDate(id, date) {
+  try {
+    await invoke('update_date', { id: String(id), date });
+    await afterTxFieldSaved(date);
+  } catch (e) {
+    toast('修改失败：' + e);
+  }
+}
+
+/* 备注：底部输入面板，保存或回车生效 */
+function openDetailNote() {
+  const tx = currentDetailTx();
+  if (!tx) return;
+  const input = $('#txdNoteInput');
   input.value = tx.note || '';
-  openModal(editNoteSheet);
-  // 等面板入场后再聚焦，否则移动端软键盘会把入场动画顶掉
+  openModal(txdNoteSheet);
   setTimeout(() => {
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
-  }, 240);
+  }, 160);
 }
 
-$('#editNoteSave').addEventListener('click', async () => {
+async function saveDetailNote() {
+  const tx = currentDetailTx();
+  if (!tx) { closeModal(); return; }
+  const note = $('#txdNoteInput').value.trim();
+  if (note === (tx.note || '')) { closeModal(); return; }
+  closeModal();
   try {
-    await invoke('update_note', { id: String(targetTxId), note: $('#editNoteInput').value.trim() });
-    await refreshTxs();
-    renderHome(true);
-    if ($('#page-stats').classList.contains('active')) renderStats(true);
-    toast('备注已修改');
+    await invoke('update_note', { id: String(tx.id), note });
+    await afterTxFieldSaved(tx.date);
   } catch (e) {
     toast('修改失败：' + e);
   }
-  closeModal();
+}
+
+$('#txdNoteSave').addEventListener('click', saveDetailNote);
+$('#txdNoteInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); saveDetailNote(); }
 });
 
-$('#editNoteInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); $('#editNoteSave').click(); }
-});
+$('#txdAmount').addEventListener('click', openDetailAmount);
+$('#txdType').addEventListener('click', openDetailType);
+$('#txdRowCat').addEventListener('click', openDetailCatRow);
+$('#txdRowDate').addEventListener('click', openDetailCal);
+$('#txdRowNote').addEventListener('click', openDetailNote);
+
 
 function showConfirmDelete() { openModal('alert'); }
 
 $('#confirmDeleteBtn').addEventListener('click', async () => {
+  const id = txDetailId;
   try {
-    await invoke('delete_tx', { id: String(targetTxId) });
+    await invoke('delete_tx', { id: String(id) });
     await refreshTxs();
     closeModal();
-    renderHome(true);
+    // 先回到来源页再修补列表：详情页此刻不可见，避免在隐藏页上改 DOM
+    if (txDetailId) closeTxDetail();
+    if (!patchAfterDelete(id)) renderHome(true);
     renderStats(true);
     updateRecordCount();
     toast('已删除');
@@ -1855,22 +1991,7 @@ $('#confirmDeleteBtn').addEventListener('click', async () => {
   }
 });
 
-[actionSheet, editTypeSheet].forEach(sheet => {
-  sheet.addEventListener('click', e => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const act = btn.dataset.act;
-    if (act === 'edit') showEditType();
-    else if (act === 'delete') showConfirmDelete();
-    else if (act === 'multi') { closeModal(); enterSelect(targetTxId); }
-    else if (act === 'editAmount') showEditAmount();
-    else if (act === 'editDate') showEditDate();
-    else if (act === 'editNote') showEditNote();
-    else if (act === 'cancel') closeModal();
-  });
-});
-
-[editAmountSheet, editDateSheet, editNoteSheet, confirmBox, budgetSheet].forEach(panel => {
+[confirmBox, budgetSheet].forEach(panel => {
   panel.addEventListener('click', e => {
     const btn = e.target.closest('button');
     if (!btn) return;
@@ -2414,10 +2535,16 @@ function switchTab(name) {
 
 $$('.tab').forEach(t => {
   t.addEventListener('click', () => {
-    // 明细页打开时「财报」tab 仍高亮，普通 active 守卫会让它点不动；
-    // 此时任意 tab 点击都应放行（点财报=返回列表，点其它=正常切换）
-    const onDetail = $('#page-catdetail').classList.contains('active');
-    if (t.classList.contains('active') && !onDetail) return;
+    // 明细页 / 记录详情页打开时底下的 tab 仍高亮，普通 active 守卫会让它点不动；
+    // 此时任意 tab 点击都应放行（点当前 tab=返回列表，点其它=正常切换）
+    const onSubPage = $('#page-catdetail').classList.contains('active')
+      || $('#page-txdetail').classList.contains('active');
+    if (!onSubPage && t.classList.contains('active')) return;
+    if ($('#page-txdetail').classList.contains('active')) {
+      // 直接切 tab：不恢复来源页，避免详情页的层级残留
+      txDetailId = null;
+      txDetailOrigin = 'home';
+    }
     switchTab(t.dataset.tab);
   });
 });
@@ -2431,6 +2558,7 @@ const fmtNum = n => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximu
 
 function openCatDetail(catId, type) {
   if (selectMode) exitSelect(); // 明细页与首页多选互斥，避免误操作
+  if ($('#page-txdetail').classList.contains('active')) txDetailId = null;  // 详情页与明细页互斥
   curCatId = catId;
   curCatType = type === 'income' ? 'income' : 'expense';
   renderCatDetail(catId, curCatType);
@@ -2537,33 +2665,30 @@ let amountStr = '0';
 let curType = 'expense';
 let curCat = 'food';
 let curDate = todayStr();
+let editingTxId = null;         // 非空 = 面板正处于「编辑账目」，保存走整条更新
 
 const sheet = $('#sheet');
 const sheetMask = $('#sheetMask');
 const amountDisplay = $('#amountDisplay');
 const amountText = $('#amountText');
 
-/** preset 传入常用项时为「修改常用项」模式，保存只更新模板 */
-function openSheet(preset) {
-  editingTemplateId = preset ? preset.id : null;
-  amountStr = preset ? String(preset.amount).replace(/\.00$/, '') : '0';
-  curType = preset ? preset.type : 'expense';
-  curCat = preset ? preset.category : (CATEGORIES.expense[0] ? CATEGORIES.expense[0].id : '');
-  curDate = todayStr();
-  $('#noteInput').value = preset ? (preset.note || '') : '';
+/** 面板公共填充：新建 / 修改常用项 / 编辑账目共用，避免三套初始状态走样 */
+function fillSheet({ type, amount, category, date, note }) {
+  amountStr = String(amount == null ? '0' : amount).replace(/\.00$/, '');
+  curType = type || 'expense';
+  curCat = category || (CATEGORIES[curType][0] ? CATEGORIES[curType][0].id : '');
+  curDate = date || todayStr();
+  $('#noteInput').value = note || '';
   $('#segmented').dataset.type = curType;
   $$('#segmented .seg').forEach(s => s.classList.toggle('active', s.dataset.type === curType));
   amountDisplay.classList.toggle('income', curType === 'income');
   updateAmountText();
   renderCatGrid();
-  if (preset) {
-    // 常用项与日期无关，不渲染日期行
-    $('#dateBtn').style.display = 'none';
-  } else {
-    renderDateBtn();
-    $('#dateBtn').style.display = '';
-  }
+  renderDateBtn();
   updateFavState();
+}
+
+function showSheetPanel() {
   sheetMask.classList.add('show');
   sheet.classList.add('show');
   document.body.classList.add('sheet-open');
@@ -2572,12 +2697,39 @@ function openSheet(preset) {
   syncBackState();
 }
 
+/** preset 传入常用项时为「修改常用项」模式，保存只更新模板 */
+function openSheet(preset) {
+  editingTemplateId = preset ? preset.id : null;
+  editingTxId = null;
+  fillSheet({
+    type: preset ? preset.type : 'expense',
+    amount: preset ? preset.amount : '0',
+    category: preset ? preset.category : null,
+    date: todayStr(),
+    note: preset ? preset.note : '',
+  });
+  // 常用项与日期无关，不渲染日期行
+  $('#dateBtn').style.display = preset ? 'none' : '';
+  showSheetPanel();
+}
+
+/** 详情页「编辑」：复用记账面板，保存走 update_tx 整条更新 */
+function openEditSheet(tx) {
+  editingTemplateId = null;
+  editingTxId = tx.id;
+  fillSheet(tx);
+  $('#dateBtn').style.display = '';
+  showSheetPanel();
+}
+
 function closeSheet() {
   sheetMask.classList.remove('show');
   sheet.classList.remove('show');
   document.body.classList.remove('sheet-open');
   $('#noteInput').blur();
   editingTemplateId = null;
+  editingTxId = null;
+  $('#favRow').hidden = false;
   syncBackState();
 }
 
@@ -2597,7 +2749,7 @@ function renderCatGrid() {
     </button>`).join('');
 }
 
-/* ============ 记账日期：按钮 + 日历（前后两个月） ============ */
+/* ================= 记账日期：按钮 + 日历（新建前后 2 月 / 编辑前后 1 年） ================= */
 let calYear, calMonth;   // 当前展示的月份
 
 function renderDateBtn() {
@@ -2611,12 +2763,20 @@ function renderDateBtn() {
   $('#dateBtn').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.2" width="16" height="15" rx="2.6"/><path d="M4 9.4h16M8.2 3.2v4M15.8 3.2v4"/></svg><span>${label}</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 }
 
-// 可选的月范围：前后两个月（含当前月）
+// 可选的月范围：新建为前后两个月；编辑账目 / 详情页改日期为前后一年，
+// 并把原日期所在月纳入范围，保证导入的老账单也能原样保存
 function calRange() {
   const now = new Date();
-  const y0 = now.getFullYear(), m0 = now.getMonth();
-  const min = new Date(y0, m0 - 2, 1);
-  const max = new Date(y0, m0 + 2, 1);
+  const editing = editingTxId || calDetailTxId;
+  const span = editing ? 12 : 2;
+  let min = new Date(now.getFullYear(), now.getMonth() - span, 1);
+  let max = new Date(now.getFullYear(), now.getMonth() + span, 1);
+  if (editing) {
+    const d = parseDate(curDate);
+    const own = new Date(d.getFullYear(), d.getMonth(), 1);
+    if (own < min) min = own;
+    if (own > max) max = own;
+  }
   return { min, max };
 }
 
@@ -2630,7 +2790,7 @@ function openCal() {
 
 function renderCal() {
   $('#calTitle').textContent = `${calYear}年${calMonth + 1}月`;
-  // 防呆：只允许在当前月前后两个月内翻页，边界处禁用箭头
+  // 防呆：只允许在 calRange 给出的范围内翻页，边界处禁用箭头
   const { min, max } = calRange();
   const cur = new Date(calYear, calMonth, 1);
   $('#calPrev').disabled = cur <= min;
@@ -2673,9 +2833,14 @@ $('#calNext').addEventListener('click', e => {
 $('#calGrid').addEventListener('click', e => {
   const btn = e.target.closest('.cal-day');
   if (!btn || btn.classList.contains('off')) return;
-  curDate = btn.dataset.date;
+  // 详情页改日期：先取出上下文与旧日期（closeModal 会清空 calDetailTxId）
+  const detailId = calDetailTxId;
+  const detailTx = detailId ? txs.find(t => String(t.id) === String(detailId)) : null;
+  const picked = btn.dataset.date;
+  curDate = picked;
   renderDateBtn();
   closeModal();
+  if (detailId && detailTx && picked !== detailTx.date) applyDetailDate(detailId, picked);
 });
 
 $('#keypad').addEventListener('click', e => {
@@ -2684,22 +2849,26 @@ $('#keypad').addEventListener('click', e => {
   pressKey(btn.dataset.k);
 });
 
-function pressKey(k) {
+/** 金额键盘的纯计算：记账面板与详情页金额面板共用（del / 小数点 / 两位小数 / 9 位整数上限） */
+function computeKeypad(str, k) {
   if (k === 'del') {
-    amountStr = amountStr.length > 1 ? amountStr.slice(0, -1) : '0';
-    if (amountStr === '') amountStr = '0';
+    str = str.length > 1 ? str.slice(0, -1) : '0';
+    if (str === '') str = '0';
   } else if (k === '.') {
-    if (!amountStr.includes('.')) amountStr += '.';
+    if (!str.includes('.')) str += '.';
+  } else if (str === '0') {
+    str = k;
   } else {
-    if (amountStr === '0') {
-      amountStr = k;
-    } else {
-      const parts = amountStr.split('.');
-      if (parts[1] !== undefined && parts[1].length >= 2) return;
-      if (parts[0].length >= 9 && parts[1] === undefined) return;
-      amountStr += k;
-    }
+    const parts = str.split('.');
+    if (parts[1] !== undefined && parts[1].length >= 2) return str;
+    if (parts[0].length >= 9 && parts[1] === undefined) return str;
+    str += k;
   }
+  return str;
+}
+
+function pressKey(k) {
+  amountStr = computeKeypad(amountStr, k);
   updateAmountText();
   updateFavState();
 }
@@ -2754,6 +2923,37 @@ async function saveTx() {
         closeSheet();
         renderQuickRow();
         toast('常用项已更新');
+      } catch (e) {
+        toast('修改失败：' + e);
+      }
+      return;
+    }
+
+    // 编辑账目：整条更新，改完回到详情页并同步所有列表
+    if (editingTxId) {
+      const id = editingTxId;
+      const savedYM = curDate.slice(0, 7);
+      try {
+        await invoke('update_tx', {
+          id: String(id),
+          txType: curType,
+          amount: amountStr,
+          category: curCat,
+          note: $('#noteInput').value.trim(),
+          date: curDate,
+        });
+        await refreshTxs();
+        closeSheet();
+        if (savedYM !== viewMonth && !searchQuery) { viewMonth = savedYM; await loadBudget(); }
+        renderHome(true);
+        renderStats(true);
+        // 详情页还开着：刷新它的内容；来源是分类明细页时顺带重绘那一页（记录可能已换分类）
+        if (txDetailId) {
+          renderTxDetail();
+          if (txDetailOrigin === 'catdetail') renderCatDetail(curCatId, curCatType, true);
+        }
+        updateRecordCount();
+        toast('已修改');
       } catch (e) {
         toast('修改失败：' + e);
       }

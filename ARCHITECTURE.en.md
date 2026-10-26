@@ -1,6 +1,6 @@
 # Ledger Architecture
 
-> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.6.0 (commit to be back-filled after the commit) ｜ **Last verified**: 2026-10-20
+> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.7.0 (commit to be back-filled after the commit) ｜ **Last verified**: 2026-10-26
 
 **One line**: Ledger is an offline-first personal expense tracker — a Tauri v2 + Rust + SQLite single-machine core with a front end that has no framework, no bundler and no build step.
 
@@ -8,7 +8,7 @@
 |---|---|
 | Audience | GitHub visitors reading the code, developers taking over or extending it, users verifying implementation details |
 | Relationship to README | [README.md](./README.md) answers "what is this / how do I use it / what features exist"; this document answers "how the system is put together / why the key decisions were made that way / where the capability boundary sits". Feature lists and installation steps are not repeated here |
-| Data source | Every number below was measured from the v1.6.0 source (2026-10-20). Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
+| Data source | Every number below was measured from the v1.7.0 source (2026-10-26). Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
 
 ---
 
@@ -59,7 +59,7 @@ flowchart TB
 |---|---|---|
 | Presentation | `src/index.html` + `src/styles.css` + `src/main.js` | All UI and interaction, statistics computation, export formatting; holds no persistence logic |
 | Transport | Tauri IPC | Front end `invoke(command, args)` → Rust `#[tauri::command]`; single window, no custom protocol |
-| Business | the 36 commands registered in `lib.rs` plus `service.rs` / `keys.rs` / `lock.rs` / `ai.rs` | Argument validation, amount conversion, transactions, credential management, AI calls |
+| Business | the 37 commands registered in `lib.rs` plus `service.rs` / `keys.rs` / `lock.rs` / `ai.rs` | Argument validation, amount conversion, transactions, credential management, AI calls |
 | Storage | `db.rs` + `rusqlite` | Schema creation, seed data, single-file SQLite access |
 | External | `reqwest` inside `ai.rs` | Only appears when the user clicks "Generate analysis"; strictly one-directional (app → provider) |
 
@@ -91,9 +91,9 @@ flowchart TB
 
 | File | Lines | Responsibility |
 |---|---:|---|
-| `src/index.html` | 773 | All page structure: home / stats / category detail / settings, plus the entry sheet, calendar, action sheets, lock overlay and batch-action bar |
-| `src/main.js` | 4467 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack |
-| `src/styles.css` | 2474 | All styling: theme variables, components, motion |
+| `src/index.html` | 805 | All page structure: home / record detail / stats / category detail / settings, plus the entry sheet, calendar, panels, lock overlay and batch-action bar |
+| `src/main.js` | 4667 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack; 18 section anchors navigable from the header comment |
+| `src/styles.css` | 2555 | All styling: theme variables, components, motion |
 | `src/vendor/xlsx.full.min.js` | 951,904 B (≈ 929.6 KB) | SheetJS 0.20.3, shipped in-repo (offline + CVE avoidance), lazily loaded only on the Excel import path |
 | `src/vendor/README.md` | — | Origin, hash and upgrade steps for the vendored file |
 
@@ -102,7 +102,8 @@ Sections inside `main.js` (following the section comments in the file):
 | Section | Main output |
 |---|---|
 | Categories & rules | `CATEGORIES` / `CAT_MAP` loading, custom keyword auto-categorisation rules (`cat_rules`) |
-| Home page | Month list grouped by day, search, month-over-month delta, multi-select batch actions, swipe-to-delete, long-press menu (including single-record note edit), quick-template chips |
+| Home page | Month list grouped by day, search, month-over-month delta, multi-select batch actions, swipe-to-delete, tap-to-open record detail, long-press to enter multi-select, quick-template chips |
+| Record detail / edit | Tap a row to open the detail page (amount / category / record time / note); all five positions are tappable — amount opens a keypad sheet, a type switch must be followed by picking a category of that type, category saves on tap, date opens the calendar, note opens an input sheet; Delete and Edit sit side by side and Edit reopens the entry sheet prefilled and saves via `update_tx` |
 | Entry sheet | Numeric keypad, amount input, category grid, date calendar, save-as-template, re-entry guard |
 | Stats page | Period switching (year/month/week/day), hand-written SVG donut, category list, 6-month trend, expense/income views |
 | Category detail | Monthly detail and statistics for one category |
@@ -112,15 +113,15 @@ Sections inside `main.js` (following the section comments in the file):
 | Back stack | `uiLayers()` / `syncBackState()` / `popstate`: mirrors the current UI hierarchy into WebView history so the Android back gesture unwinds it layer by layer ([§14.4](#144-back-key--swipe-back-stack)) |
 | Boot | `boot()`: theme → lock → categories → rules → transactions → monthly budget; the over-budget reminder on launch |
 
-### 2.2 Backend (8 modules, 2881 lines total)
+### 2.2 Backend (8 modules, 2988 lines total)
 
 | Module | Lines | Responsibility | Depends on |
 |---|---:|---|---|
 | `main.rs` | 6 | Process entry point, calls `ledger_lib::run()` | `lib` |
-| `lib.rs` | 571 | Wiring layer: manages state, registers 36 commands, implements export/import, startup migration | all business modules |
+| `lib.rs` | 587 | Wiring layer: manages state, registers 37 commands, implements export/import, startup migration | all business modules |
 | `db.rs` | 105 | Opens the connection, idempotent schema creation, seed categories, first-run default templates | `models` (implicitly), `rusqlite` |
 | `models.rs` | 38 | Three data structures: `Transaction` / `Template` / `Category` | `serde` |
-| `service.rs` | 947 | Amount and date parsing/validation, id generation, CRUD, category validation and delete protection, budget, settings access | `models`, `chrono`, `rusqlite` |
+| `service.rs` | 1038 | Amount and date parsing/validation, id generation, CRUD, whole-record update, category validation and delete protection, budget, settings access | `models`, `chrono`, `rusqlite` |
 | `keys.rs` | 339 | AI config read/write, three-tier key storage, masked echo, legacy key migration | `service`, `ai`, `keyring` |
 | `lock.rs` | 118 | App lock: PIN format validation, Argon2id hashing, verification, disabling | `service`, `argon2` |
 | `ai.rs` | 757 | OpenAI-style HTTP client: capability-profile degradation, error mapping, tolerant output parsing, TLS setup | `reqwest`, `rustls`, `serde_json` |
@@ -140,13 +141,13 @@ Rule: business functions always take a `&Connection` supplied by the caller insi
 
 ---
 
-## 3. Command contract (36 commands)
+## 3. Command contracts (37)
 
-Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L530-L567`). The 36 rows below close exactly against it — nothing extra, nothing missing. Every failure path returns `Result<_, String>`, where the `String` is a user-displayable Chinese message.
+Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L546-L584`). The 37 rows below close exactly against it — nothing extra, nothing missing. Every failure path returns `Result<_, String>`, where the `String` is a user-displayable Chinese message.
 
-**Groups (7, 36 total)**: transactions 8 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2.
+**Groups (7, 37 total)**: transactions 9 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2.
 
-### 3.1 transactions (8)
+### 3.1 transactions (9)
 
 | Command | Arguments | Returns | Notes |
 |---|---|---|---|
@@ -155,6 +156,7 @@ Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L530-L567`). The 36 rows 
 | `update_amount` | `id`, `amount` | `Transaction` | Amount only; re-runs amount validation |
 | `update_date` | `id`, `date` | `Transaction` | Date window rules in §5.1; an unchanged date is always allowed |
 | `update_note` | `id`, `note` | `Transaction` | Note only; runs the same `normalize_note` as `add_tx` (trimmed, ≤ 30 chars) |
+| `update_tx` | `id`, `tx_type`, `amount`, `category`, `note`, `date` | `Transaction` | Whole-record update (detail page → Edit): the category must match the type; the date window is checked **only when the date changes**; `created_at` is untouched |
 | `delete_tx` | `id` | `bool` | `true` when a row was hit |
 | `clear_all_tx` | — | `usize` | Empties `transactions`, returns the deleted count (does **not** touch categories/budgets/templates/settings) |
 | `update_category_batch` | `ids: string[]`, `category` | `usize` | Batch re-categorisation; the target must match the direction of **every** selected record |
@@ -217,7 +219,7 @@ Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L530-L567`). The 36 rows 
 | `read_db_bytes` | — | `Vec<u8>` | For export; copies to a temp DB first and strips `ai_api_key` / `deepseek_api_key` / `ai_key_hint`; falls back to raw bytes if any step fails |
 | `import_db_data` | `data: Vec<u8>` | `usize` | Restores a SQLite backup with an atomic overwrite (see §6); returns the imported transaction count |
 
-> Front-end call sites (examples): `add_tx` ← `saveTx()` (`main.js`), `update_category_batch` ← batch re-categorisation, `update_note` ← the "Edit note" action sheet, `read_db_bytes` ← `exportBackup()`, `import_db_data` ← `importBackup()`, `ai_analyze` ← generate analysis. **All 36 commands** have a front-end call site.
+> Front-end call sites (examples): `add_tx` ← `saveTx()` (`main.js`), `update_tx` ← record detail "Edit" / type switch / single-record re-categorisation, `update_amount` / `update_date` / `update_note` ← tapping a field on the record detail page, `update_category_batch` ← batch re-categorisation, `read_db_bytes` ← `exportBackup()`, `import_db_data` ← `importBackup()`, `ai_analyze` ← generate analysis. All 37 commands have a front-end call site.
 
 ---
 
@@ -336,26 +338,26 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 | Category validation | `check_category` requires the category to exist with a matching `type` | `service.rs#L86-L102` |
 | Note normalisation | `trim()` then ≤ 30 characters | `service.rs#L104-L111` |
 | Date window | Date edits are limited to "today ± 365 days" (`EDIT_DATE_MAX_DAYS = 365`, `#L7`); **but a new date equal to the original is always allowed** (otherwise an imported historical transaction could not even be re-saved unchanged) | `service.rs#L181-L203` |
-| Delete protection | The fallback category cannot be deleted; `fallback` must exist and match the type of the deleted category; the move and the delete happen in one transaction | `service.rs#L641-L695` |
-| Batch re-categorisation | The target category must match the direction of **every** selected record, otherwise the whole batch is rejected (prevents statistics from crossing expense/income) | `service.rs#L230-L296` |
-| Transactions | `unchecked_transaction()` is used (the connection is already guarded by the outer mutex, so no `&mut` borrow is needed) | `service.rs#L286`, `#L680`, `#L698` |
+| Delete protection | The fallback category cannot be deleted; `fallback` must exist and match the type of the deleted category; the move and the delete happen in one transaction | `service.rs#L683-L737` |
+| Batch re-categorisation | The target category must match the direction of **every** selected record, otherwise the whole batch is rejected (prevents statistics from crossing expense/income) | `service.rs#L272-L338` |
+| Transactions | `unchecked_transaction()` is used (the connection is already guarded by the outer mutex, so no `&mut` borrow is needed) | `service.rs#L328`, `#L722`, `#L740` |
 | Error shape | Always `Result<_, String>`, with directly displayable Chinese messages; network errors are mapped by `status_error` / `network_error` | `ai.rs#L169-L198` |
 
 ### 5.2 Front end
 
 | Mechanism | Implementation notes | Source |
 |---|---|---|
-| Panel registry | Every sheet/modal lives in the `allPanels` array; `openModal` / `closeModal` toggle them and handle cancellation uniformly — **a new panel that is not registered shows up as "black screen, no response"** | `main.js#L1511-L1556` |
-| Panel exclusivity | `activePanel` tracks the current overlay so keyboard events and "back" act on the overlay first, preventing event bleed-through | `main.js#L1532`, `#L1551`, `#L1580`, `#L1892` |
-| Entry state | `curType` ("expense"/"income") and `editingTemplateId` (`null` = new entry, non-null = editing a quick template); the latter decides whether save goes through `add_tx` or `update_template` | `main.js#L2537`, `#L2720-L2721`, `#L2744-L2748` |
-| Save re-entry guard | The `savingTx` flag with `if (savingTx) return`, preventing a double-tap or double-Enter from recording two transactions | `main.js#L2728`, `#L2731`, `#L2741` |
-| View month | `viewMonth` (`YYYY-MM`); switching months must call `loadBudget()` again, otherwise the previous month's budget lingers | `main.js#L248`, `#L1253-L1254`, `#L2033-L2034` |
-| Lock overlay | Defaults to `display:none`, shown only when JS removes the `hidden` attribute; going to the background (`visibilitychange` + `document.hidden` while the lock is enabled) re-locks | `index.html#lockOverlay` (L757), `main.js#L4263`, `#L4269`, `#L4410-L4411` |
-| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4453-L4467` |
-| Date picker guard | The calendar only pages within the current month ±2 (`calRange()` supplies `min`/`max` and the arrows are disabled at the edges); out-of-range days render as non-clickable `.cal-day.off` | `main.js#L2615-L2621` (guard at `#L2635-L2636`) |
-| Month view range | The home page allows switching within "12 months back to 3 months forward" (`monthShiftAllowed`) | `main.js#L2023`, `#L2025-L2026` |
-| Theme | Three states: follow the system (`prefers-color-scheme`), explicit `data-theme="dark"`, explicit `data-theme="light"` | `styles.css#L59-L127`, `main.js#L4207` |
-| Report date picker | After picking "Day" in the "Balance range" sheet, the date list shows **only dates that actually have records** (aggregated from `txs`, deduplicated, newest first) instead of a fixed "last 12 days / next 3 days" window; each row shows that day's expense/income, and an empty state appears when there are no records | `main.js#L1972-L2004` |
+| Panel registry | Every sheet/modal lives in the `allPanels` array; `openModal` / `closeModal` toggle them and handle cancellation uniformly (including the detail-page amount / type / note panels) — **a new panel that is not registered shows up as "black screen, no response"** | `main.js#L1548-L1551` |
+| Panel exclusivity | `activePanel` tracks the current overlay (the detail-page category picker shares `#batchCatSheet` with batch re-categorisation and is routed by `txdCatCtx`) so keyboard events and "back" act on the overlay first, preventing event bleed-through | `main.js#L1553` |
+| Entry state | `curType` ("expense"/"income") plus `editingTemplateId` / `editingTxId` (both null = new entry; the first non-null = editing a quick template; the second non-null = editing a transaction), which routes saving to `add_tx` / `update_template` / `update_tx` | `main.js#L2664-L2668`, `#L2933` |
+| Save re-entry guard | The `savingTx` flag with `if (savingTx) return`, preventing a double-tap or double-Enter from recording two transactions | `main.js#L2899`, `#L2910` |
+| View month | `viewMonth` (`YYYY-MM`); switching months must call `loadBudget()` again, otherwise the previous month's budget lingers | `main.js#L275`, `#L2152-L2157` |
+| Lock overlay | Defaults to `display:none`, shown only when JS removes the `hidden` attribute; going to the background (`visibilitychange` + `document.hidden` while the lock is enabled) re-locks | `index.html#lockOverlay`, `main.js#L4463-L4471`, `#L4610-L4611` |
+| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4654-L4660` |
+| Date picker guard | New entries page within the current month ±2; edits and detail-page date changes page within ±1 year (`calRange()` supplies `min`/`max` and the arrows are disabled at the edges); out-of-range days render as non-clickable `.cal-day.off` | `main.js#L2768-L2781` (guard at `#L2808`) |
+| Month view range | The home page allows switching within "12 months back to 3 months forward" (`monthShiftAllowed`) | `main.js#L2144-L2150` |
+| Theme | Three states: follow the system (`prefers-color-scheme`), explicit `data-theme="dark"`, explicit `data-theme="light"` | `styles.css#L59-L127`, `main.js#L4396-L4421` |
+| Report date picker | After picking "Day" in the "Balance range" sheet, the date list shows **only dates that actually have records** (aggregated from `txs`, deduplicated, newest first) instead of a fixed "last 12 days / next 3 days" window; each row shows that day's expense/income, and an empty state appears when there are no records | `main.js#L2093-L2125` |
 | Input debounce | Quick-template chips reject repeat taps within 350 ms; a 500 ms long press enters multi-select (cancelled by a horizontal swipe or > 8 px jitter) | `main.js`, quick-template and list-gesture sections |
 
 ---
@@ -415,7 +417,7 @@ Model output is frequently malformed (especially from small models), so parsing 
 
 ### 7.4 Cache and clearing
 
-Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (written by the front end, see `main.js#L3979`, `#L4032`); `ai_clear_analyses` deletes everything with the `ai_analysis_` prefix, touching only the cache and never transactions or keys. Whether notes are sent to the AI is controlled by `ai_include_notes`, and first use requires consent via `ai_privacy_accepted`.
+Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (written by the front end, see `main.js#L4179`, `#L4232`); `ai_clear_analyses` deletes everything with the `ai_analysis_` prefix, touching only the cache and never transactions or keys. Whether notes are sent to the AI is controlled by `ai_include_notes`, and first use requires consent via `ai_privacy_accepted`.
 
 ---
 
@@ -466,7 +468,7 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 | Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L521-L522`); recovery relies on backups |
 | PIN brute-force resistance | No attempt limit and no delay |
 | Import scope | Excludes settings; backups missing newer tables are incompatible |
-| Front-end size | A single 4467-line `main.js` with no module split; readability relies on section comments |
+| Front-end size | A single 4667-line `main.js` with no module split; readability relies on the 18-section navigation comment at the top plus matching anchors. Split triggers: file exceeds 6000 lines, a feature touches 3+ sections, or a function is called from 3+ sections with drifting semantics |
 | Query scale | Full load plus front-end filtering; no pagination or virtual list, and very large ledgers (10k+ rows) have not been performance-verified |
 
 **Divergence from the early course documents**: several descriptions in the project's early document set (`ledger document/`, never under version control) no longer match reality and are not carried over here. Three typical cases: (1) its UI spec describes iOS system colours (`#F2F2F7` / `#007AFF` / 24 px corners) while the current theme is a warm neutral paper feel with dark indigo accents, measured in §13; (2) its database document describes a single table while there are five (§4); (3) its test plan claims "editing the date to 400 days ago is always rejected" (now the opposite: re-saving an **unchanged** date is allowed) and "a corrupted data file falls back to an empty ledger", which is not implemented in code.
@@ -478,19 +480,19 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 ```
 ledger/
 ├── src/                          Front end (plain HTML/CSS/JS, no build)
-│   ├── index.html                773 lines · all page structure
-│   ├── styles.css                2474 lines · theme variables and all styling
-│   ├── main.js                   4467 lines · all logic (ES module)
+│   ├── index.html                805 lines · all page structure
+│   ├── styles.css                2555 lines · theme variables and all styling
+│   ├── main.js                   4667 lines · all logic (ES module)
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3, shipped in-repo (951,904 B)
 │       └── README.md             origin / SHA-256 / upgrade steps
 ├── src-tauri/                    Rust backend
 │   ├── src/
 │   │   ├── main.rs               6 lines · entry point
-│   │   ├── lib.rs                571 lines · 36 command registrations + import/export + startup migration
+│   │   ├── lib.rs                587 lines · 37 command registrations + import/export + startup migration
 │   │   ├── models.rs             38 lines · Transaction / Template / Category
 │   │   ├── db.rs                 105 lines · schema and seed data
-│   │   ├── service.rs            947 lines · business logic
+│   │   ├── service.rs            1038 lines · business logic
 │   │   ├── keys.rs               339 lines · three-tier API key storage
 │   │   ├── lock.rs               118 lines · app lock
 │   │   └── ai.rs                 757 lines · AI client
@@ -578,7 +580,7 @@ The `android:release:arm64` script emits Gradle's default file name, `app-arm64-
 
 ### 11.5 Testing and self-checks
 
-`cargo test` covers 24 cases (distribution in §15). Every assertion uses an in-memory database or a `TcpListener` mock server, so no real data file is touched.
+`cargo test` covers 27 cases (distribution in §15). Every assertion uses an in-memory database or a `TcpListener` mock server, so no real data file is touched.
 
 ### 11.6 Artefact paths
 
@@ -698,7 +700,9 @@ Home page
 ├─ Top: month switch / search / this-month expense·income·balance / month-over-month delta / budget strip
 ├─ Quick-template chip row (hidden while searching or multi-selecting)
 └─ Transaction list grouped by day
-     ├─ Tap a row → action sheet (amount / date / note / multi-select / delete)
+     ├─ Tap a row → record detail page (amount / category / record time / note; Delete and Edit side by side)
+     ├─ Detail page: tap amount / type / category / date / note → the matching sheet, saved immediately and refreshed in place
+     ├─ Detail page → Edit → entry sheet prefilled, saved via `update_tx`
      ├─ Swipe left → delete
      ├─ 500 ms long press → multi-select (bottom bar: select all / re-categorise / cancel)
      └─ 420 ms long press on a chip → edit / delete that quick template
@@ -707,9 +711,15 @@ Entry sheet (floating "New entry" button)
 ├─ Expense / income segmented control
 ├─ Numeric keypad + amount display
 ├─ Category grid (with a "Manage categories" entry)
-├─ Date button → calendar overlay (current month ±2)
+├─ Date button → calendar overlay (new: current month ±2; edit / detail-page date change: ±1 year, including the original month)
 ├─ Note (≤ 30 chars)
-└─ Save as quick template
+└─ Save as quick template (hidden in edit mode)
+
+Record detail page (tap a row)
+├─ Amount (red expense / green income), category, record time, note
+├─ Tap any of the five positions → its own sheet: amount keypad / type switch (then a category of that type) / category picker / calendar / note input; saving refreshes the page in place
+├─ Delete and Edit side by side
+└─ Edit reopens the entry sheet prefilled → `update_tx`
 
 Stats page
 ├─ Period switch (year / month / week / day) (choosing "Day" lists dates that have records)
@@ -717,7 +727,7 @@ Stats page
 ├─ Donut + category list (tap to open the category detail)
 └─ 6-month trend / AI analysis panel
 
-Category detail page · Settings page · Lock overlay
+Category detail page · Record detail page · Settings page · Lock overlay
 ```
 
 ### 14.2 The four core flows
@@ -725,36 +735,39 @@ Category detail page · Settings page · Lock overlay
 | Flow | Steps |
 |---|---|
 | New entry | Open the sheet → choose type → key in the amount → pick a category → (optional) change the date, add a note → save. Saving is guarded by `savingTx`; in "editing a quick template" state it goes through `update_template` instead |
-| Edit amount | Tap a transaction row → action sheet "Edit amount" → edit keypad → save (`update_amount`) |
-| Edit note | Tap a transaction row → action sheet "Edit note" → edit the input (≤ 30 chars, can be cleared) → save (`update_note`) |
+| View a record | Tap a row → record detail page (amount / category / record time / note) → Delete and Edit side by side; back returns to the origin (home, category detail or the still-active search results) |
+| Edit a single field | On the detail page: tap amount → keypad sheet → save (`update_amount`); tap type → after choosing the other type a category of that type must be picked (`update_tx`); tap category → saves on tap (`update_tx`); tap date → calendar, saves on tap (`update_date`, no write for the same day); tap note → input sheet, save or Enter (`update_note`). The detail page re-renders in place and the home / stats / record count stay in sync |
+| Edit a record | Detail page → Edit → the entry sheet opens prefilled (quick-template row hidden) → change type / amount / category / date / note → save (`update_tx`, whole-record update) |
 | Swipe to delete | Swipe a row left → reveal the delete button → confirm (`delete_tx`); batches are handled in multi-select mode |
 
 ### 14.3 State notes
 
 | State | Constraint |
 |---|---|
-| `curType` + `editingTemplateId` | The two must agree: a non-null `editingTemplateId` first restores `curType` and the amount/category/note from that quick template |
+| `curType` + `editingTemplateId` / `editingTxId` | Three sheet modes: new entry (both null), edit a quick template (`editingTemplateId` set, restores type/amount/category/note and hides the date row), edit a transaction (`editingTxId` set, restores the whole record and hides the quick-template row); the last two are mutually exclusive |
+| `txDetailId` + `txDetailOrigin` | The record shown on the detail page and its origin (`home` / `catdetail`); the back stack seeds the origin layers from it, and delete/edit refresh the corresponding lists |
+| `txdCatCtx` / `calDetailTxId` / `txdAmountStr` | Temporary context for detail-page field edits: the single record and target type for the category picker, the record id for the calendar, and the input string for the amount panel; `closeModal()` clears all three so a reused panel never carries stale context (batch re-categorisation and single-record re-categorisation share `#batchCatSheet`, routed by `txdCatCtx`) |
 | `activePanel` | When an overlay is open, keyboard events and "back" act on the overlay first, preventing bleed-through |
 | `allPanels` | Panels are registered centrally with shared `show`/`hide` and cancel handling |
 | `viewMonth` | Switching months must call `loadBudget()`; the budget is bound to the month and never carried over silently |
 | Lock `hidden` | The overlay defaults to `display:none` and appears only when JS removes `hidden`; going to the background returns it to the verify state |
 | Search / multi-select | Hides the quick-template row and the budget strip, restoring them on exit (the home-page month-over-month delta row is also hidden while searching, so it never contradicts a cross-month filtered figure) |
 | Back stack `syncedLayers` / `sentinelCount` | Must stay in one-to-one correspondence with the live UI layers; several UI changes within the same turn are merged into a single history operation by `queueMicrotask`, so the layer count cannot drift (§14.4) |
-| Silent repaint `renderHome(silent)` / `renderStats(silent)` / `renderCatDetail(…, silent)` | Rebuilds that follow an **in-place data change** (delete / edit amount / edit note / batch re-categorise / import …) pass `silent = true`, adding `no-anim` to the container (`#txList` / `#catList` / `#catDetailList`) so the entry animations of `.day-group` / `.cat-row` / `.empty-state` are suppressed; paths that genuinely change the view (first entry / month switch / tab switch / search filtering) keep their animations |
+| Silent repaint `renderHome(silent)` / `renderStats(silent)` / `renderCatDetail(…, silent)` | Rebuilds that follow an **in-place data change** (delete / detail-page field edits / batch re-categorise / import …) pass `silent = true`, adding `no-anim` to the container (`#txList` / `#catList` / `#catDetailList`) so the entry animations of `.day-group` / `.cat-row` / `.empty-state` are suppressed; paths that genuinely change the view (first entry / month switch / tab switch / search filtering) keep their animations |
 | In-place patch `patchAfterDelete()` | A swipe-delete **never rebuilds the list DOM**: it removes just the deleted row, recomputes that day's total from the `data-date` on its `.day-group` (dropping the whole group when the day has no rows left), then writes the top summary / month-over-month delta / budget in place. A full `innerHTML` rebuild makes Android WebView drop a frame while swapping, which reads as the whole list flashing — suppressing the entry animation cannot cover that part. It falls back to a silent repaint for multi-select, search filtering, a row that is no longer listed, or an emptied list that needs the empty state; when the category-detail page is open, the home list is patched too (a tab switch does not re-render the home page) |
 
 ### 14.4 Back key / swipe-back stack
 
 **The problem**: every page and overlay in the front end is a class toggle, `pushState` was never called and WebView history is always one entry; the Android back gesture therefore has no interceptor and falls straight through to the Activity default of `finish()`-ing itself. The fix needs both halves (see [§8](#8-key-design-decisions-and-trade-offs)): the front end writes the UI hierarchy into history, and Android turns on `handleBackNavigation` (`src-tauri/gen/android/app/src/main/java/com/tauri_app/ledger/MainActivity.kt`).
 
-**Layer definition**: `uiLayers()` is derived from the live DOM, ordered bottom-up — that order is the order the back key unwinds: `stats` / `catdetail` / `settings` → `ai` → `search` → `select` → `sheet` → `modal` → `lock`. The category detail page always counts as two layers ("stats page + detail page"), because its entry point is the stats page.
+**Layer definition**: `uiLayers()` is derived from the live DOM, ordered bottom-up — that order is the order the back key unwinds: `stats` / `catdetail` / `settings` → `txdetail` → `ai` → `search` → `select` → `sheet` → `modal` → `lock`. The category detail page always counts as two layers ("stats page + detail page"), because its entry point is the stats page. The record detail page seeds `stats + catdetail` or nothing according to its origin, and keeps `search` underneath when opened from search results.
 
 **Synchronisation rules** (`commitBackState`):
 
 | Change | Action |
 |---|---|
 | Layer count grows | `history.pushState({ layers })`, raising one sentinel, `sentinelCount++` |
-| Same count, different content (e.g. action sheet → multi-select) | `history.replaceState({ layers })` |
+| Same count, different content (e.g. search → multi-select) | `history.replaceState({ layers })` |
 | Layer count shrinks | Record the number of sentinels to retire, then silently `history.back()` them all in one go after `setTimeout(0)` |
 
 Several UI changes within the same turn (microtask) are merged into one history operation. Otherwise "close one overlay and open another" would first queue a physical back and then push a new layer, drifting the layer count.
@@ -770,6 +783,7 @@ Several UI changes within the same turn (microtask) are merged into one history 
 | `search` | `closeSearch()` |
 | `ai` | `setStatsView('chart')` (stays on the stats page) |
 | `catdetail` | `closeCatDetail()` (returns to the stats page) |
+| `txdetail` | `closeTxDetail()` (returns to the origin page; search results stay active) |
 | `stats` / `settings` | `switchTab('home')` |
 
 Programmatic backs (overlays closed through the UI) are told apart from gesture backs by a `backSuppress` counter; the former must not trigger peeling. If the physical sentinel count is below the live UI layer count (the unlock screen that refuses to exit, or the PIN flow stepping back within one step), sentinels are topped up after the back. Only when the bottom layer is reached (`canGoBack()` false) does another back fall through to the system default of quitting the app.
@@ -780,11 +794,11 @@ Programmatic backs (overlays closed through the UI) are told apart from gesture 
 
 ## 15. Test strategy
 
-### 15.1 Backend unit tests (24: 23 run + 1 `#[ignore]`)
+### 15.1 Backend unit tests (27: 26 run + 1 `#[ignore]`)
 
 | Module | Count | Coverage |
 |---|---:|---|
-| `service.rs` | 7 | Prefix delete treats `_` literally (not as a wildcard), ids stay unique across same-millisecond writes, single-record note edit (trimmed before writing, clearing allowed, 31 chars rejected, missing record errors), delete-category fallback validation (missing/mismatched type both rejected), date window (re-saving an out-of-window date unchanged is allowed while moving it to another out-of-window date is rejected), direction guard for batch re-categorisation, category-name uniqueness within a type |
+| `service.rs` | 10 | Prefix delete treats `_` literally (not as a wildcard), ids stay unique across same-millisecond writes, single-record note edit (trimmed before writing, clearing allowed, 31 chars rejected, missing record errors), delete-category fallback validation (missing/mismatched type both rejected), date window (re-saving an out-of-window date unchanged is allowed while moving it to another out-of-window date is rejected), direction guard for batch re-categorisation, category-name uniqueness within a type, whole-record update (type switch with category swap, note trimmed, `created_at` untouched), cross-type category rejection with no write |
 | `ai.rs` | 12 (1 ignored) | Fence stripping, plain-JSON parsing, salvaging Chinese keys and string-form advice, rejecting garbage, prompt containing the json keyword and an example, local-address detection, base URL not duplicating the path, thinking sent only to DeepSeek with json-mode degradation, reasoning models dropping temperature, retryable-decision boundaries, end-to-end degradation against a `TcpListener` mock OpenAI server; **ignored**: real TLS connectivity and error mapping (marked "needs network; costs no tokens", `ai.rs#L718`) |
 | `keys.rs` | 3 | Mask does not leak the middle, default database-storage round trip, a local base needs no key while an invalid base URL is rejected |
 | `lock.rs` | 2 | PIN hash round trip (set → verify → disable → always pass), PIN format rules (length / digits only) |
@@ -820,8 +834,8 @@ The front end currently has **no automated test framework**. The cases below mus
 | U-01 | Cold start | Home page is usable, no white screen; when the lock is enabled it goes straight to the unlock screen |
 | U-02 | New entry (one expense, one income) | The list and the top summary update together; amounts carry no cents error |
 | U-03 | Quick templates | Repeat taps within 350 ms are rejected ("点太快了"); a 420 ms long press opens edit/delete; the 7th favourite is rejected with a prompt to delete one first |
-| U-04 | Edit amount / date | The calendar only allows the current month ±2, out-of-range days are greyed out; after a date change the list re-groups under the right day |
-| U-05 | Swipe-to-delete / tap-menu / search | All three existing interactions work; right-clicking a chip on desktop does not record a transaction |
+| U-04 | Edit date | Opening Edit from the detail page lets the calendar page within ±1 year and always includes the original record's month; new entries still page within the current month ±2, with out-of-range days greyed out; after a date change the list re-groups under the right day and a cross-month change switches the home month |
+| U-05 | Swipe-delete / tap-to-detail / long-press multi-select / search | Tapping a row opens the detail page with fields matching the list; multi-select requires a 500 ms long press; swipe-delete and search work; right-clicking a chip on desktop does not record a transaction |
 | U-06 | Multi-select batch | Select all, re-categorise (expense/income mixed selections shown in separate sections), cancel; mismatched direction is rejected |
 | U-07 | Category management | Add/edit (type locked)/drag-reorder/delete (needs a fallback when referenced; the fallback itself cannot be deleted) |
 | U-08 | Budget | Applies to the currently viewed month; switching shows that month's budget (a new month defaults to unset); the strip is hidden while searching |
@@ -832,9 +846,10 @@ The front end currently has **no automated test framework**. The cases below mus
 | U-13 | AI analysis | Without a key a Chinese message appears; with a key the analysis is generated and cached; clearing removes only the analysis cache; copy and layout hold in both themes |
 | U-14 | Theme | Follow-system / explicit dark / explicit light all switch and survive a refresh |
 | U-15 | Month-over-month delta / over-budget reminder | A rise/fall percentage appears under this month's expense (red up, green down, "持平" when the gap is < 0.05%); the row is hidden when last month has no expense or while searching; on launch, if the viewed month is already over budget a centred reminder appears once; a transaction that exactly tips the month into overspending appends the overage to the success toast |
-| U-16 | Android back gesture / back key | Unwinds layer by layer: overlay first → (second-level panel inside an overlay) → AI view → category detail → non-home tab → home; only another back at the bottom layer quits the app; closing through the UI costs no extra back press; the back key is **ineffective** on the unlock screen; in the set-PIN flow, a back at the second step returns to the first (§14.4) |
-| U-17 | No flicker after an in-place change | After a swipe-delete / amount edit / date edit / note edit / delete inside an overlay / batch re-categorise / import / clear, the list is **rebuilt as a whole but without replaying its entry animation** (no full-list fade-out-then-fade-in flicker); a swipe-delete goes further and uses an **in-place patch** that never rebuilds the whole list DOM; first entry, month switch, tab switch and search filtering — paths that genuinely change the view — still play the entry animation (§14.3) |
+| U-16 | Android back gesture / back key | Unwinds layer by layer: overlay first → (second-level panel inside an overlay) → edit sheet → record detail page → AI view → category detail → non-home tab → home; only another back at the bottom layer quits the app; closing through the UI costs no extra back press; the back key is **ineffective** on the unlock screen; in the set-PIN flow, a back at the second step returns to the first (§14.4) |
+| U-17 | No flicker after an in-place change | After a swipe-delete / editing a record (whole-record update) / detail-page field edits / delete / batch re-categorise / import / clear, the list is **rebuilt as a whole but without replaying its entry animation** (no full-list fade-out-then-fade-in flicker); a swipe-delete goes further and uses an **in-place patch** that never rebuilds the whole list DOM; first entry, month switch, tab switch and search filtering — paths that genuinely change the view — still play the entry animation (§14.3) |
 | U-18 | Report "Balance range → Day" date picker | The date list shows only dates that actually have records (newest first), each row showing that day's expense/income; any historical date with data can be selected and correctly shows that day's balance; dates without records are absent from the list; an empty state appears for an empty ledger (§5.2) |
+| U-19 | Record detail / edit | Amount sign and colour are correct (income green); an empty note shows "无"; records without `createdAt` hide the "录入于" sub-line; entering from search results and going back keeps the search results; deleting from the detail page returns to the origin page with no list flicker; the edit sheet hides the quick-template row and, after saving, the detail page, home list and stats page all refresh; switching expense → income in edit mode swaps the category grid; **the amount can be edited and must be >0; a type switch requires picking a new-type category and cancelling leaves the type unchanged; tapping a category saves immediately; picking the same date writes nothing and a cross-month move syncs the home month; clearing the note and saving shows "无"; for each of the five sheets, back closes the sheet first and the detail page stays** |
 
 > Divergence from the early course documents: their T-07 has been rewritten to match reality (moving a date to another out-of-window value is still rejected, but re-saving an **unchanged** out-of-window date is allowed — see §5.1), and T-14 "a corrupted data file falls back to an empty ledger" does not exist in the implementation (see §9), so it is dropped and not used as an acceptance case.
 
@@ -864,4 +879,4 @@ The front end currently has **no automated test framework**. The cases below mus
 
 ---
 
-**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.6.0 (commit to be back-filled after the commit); after code changes, please re-verify the line numbers and measured figures listed here.
+**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.7.0 (commit to be back-filled after the commit); after code changes, please re-verify the line numbers and measured figures listed here.

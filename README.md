@@ -32,7 +32,10 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 - 新增支出 / 收入，数字键盘输入，金额以「分」为单位存储，杜绝浮点误差
 - 月流水按天分组，展示当日收支合计，顶部卡片汇总本月支出 / 收入 / 结余
 - 任意历史月份切换（前 12 个月 ~ 后 3 个月）
-- 修改金额、修改日期、修改备注、删除记录、清空全部记录
+- 单击任意流水进入**记录详情页**：记录时间 / 金额 / 分类 / 备注一目了然，底部「删除」「编辑」同行
+- 详情页五个位置都能单击修改：金额（键盘面板）、支出 / 收入（切类型后选分类）、分类（分类面板）、记录时间（日历）、备注（输入面板），保存即生效
+- 「编辑」直接打开与新建账单同构的面板，可一次改掉类型 / 金额 / 分类 / 日期 / 备注
+- 长按流水进入多选，批量改分类、批量删除；支持全选
 - 快捷模板：把常用账目存成模板，一键记账
 
 **统计**
@@ -62,7 +65,7 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 **其他**
 
 - 浅色 / 深色主题切换，默认跟随系统
-- Android 返回手势 / 返回键逐层回退：先关弹层 → 退二级面板 → 退分类明细页 / AI 视图 → 退非首页 tab → 首页，剥到最底层再按才退出应用（解锁界面下返回键无效）
+- Android 返回手势 / 返回键逐层回退：先关弹层 → 退编辑面板 → 退记录详情页 → 退分类明细页 / AI 视图 → 退非首页 tab → 首页，剥到最底层再按才退出应用（解锁界面下返回键无效）
 - 数据导出：Excel (`.xlsx`) / CSV (`.csv`) / SQLite (`.sqlite`) 备份
 - 数据导入：Excel / CSV 账单、SQLite 恢复（覆盖当前）
 
@@ -73,9 +76,9 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 | 层 | 技术 | 版本 | 说明 |
 |---|---|---|---|
 | 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
-| 后端 | Rust (edition 2021) | — | 8 个模块，注册 **36 个 `#[tauri::command]`** |
+| 后端 | Rust (edition 2021) | — | 8 个模块，注册 **37 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
-| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4467 行、`styles.css` 2474 行、`index.html` 773 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
+| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4667 行、`styles.css` 2555 行、`index.html` 805 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
 | 密码哈希 | argon2（Argon2id，纯 Rust） | 0.5 | 应用锁 PIN 哈希，无 C 依赖 |
@@ -104,7 +107,7 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 
 **金额全程不出现浮点**：后端以整数「分」落库，对外用 `"12.34"` 字符串传输，解析时逐位校验（单一小数点、整数位 ≤ 9、小数位 ≤ 2、必须 > 0）。
 
-> 完整的模块依赖图、36 个命令契约、并发模型、DDL 全文与设计取舍见 [ARCHITECTURE.md §2–§8](./ARCHITECTURE.md#2-模块结构)。
+> 完整的模块依赖图、37 个命令契约、并发模型、DDL 全文与设计取舍见 [ARCHITECTURE.md §2–§8](./ARCHITECTURE.md#2-模块结构)。
 
 ---
 
@@ -203,7 +206,7 @@ ledger/
 ├── src-tauri/                  Rust 后端
 │   ├── src/
 │   │   ├── main.rs             入口
-│   │   ├── lib.rs              Tauri 命令注册（36 个 invoke 命令）
+│   │   ├── lib.rs              Tauri 命令注册（37 个 invoke 命令）
 │   │   ├── models.rs           数据结构
 │   │   ├── db.rs               SQLite 连接与建表
 │   │   ├── service.rs          业务逻辑：金额 / 日期 / 分类校验、增删改查
@@ -216,7 +219,7 @@ ledger/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── docs/                       截图（明细页 / 记账面板 / 财报页）
-├── ARCHITECTURE.md             架构文档（中文）：36 个命令契约 / 数据模型 / 设计取舍
+├── ARCHITECTURE.md             架构文档（中文）：37 个命令契约 / 数据模型 / 设计取舍
 ├── ARCHITECTURE.en.md          架构文档（英文）
 ├── package.json
 ├── LICENSE                     MIT

@@ -214,6 +214,48 @@ pub fn update_note(conn: &Connection, id: &str, note: &str) -> Result<Transactio
     get(conn, id).map_err(|e| e.to_string())?.ok_or_else(|| "记录不存在".into())
 }
 
+/// 整条更新：类型 / 金额 / 分类 / 备注 / 日期一次落库（记录详情页的「编辑」使用）。
+/// 日期只在真正改变时才做 ±EDIT_DATE_MAX_DAYS 校验，与 update_date 口径一致，
+/// 否则导入的历史账单一改备注就会被拒。
+pub fn update_full(
+    conn: &Connection,
+    id: &str,
+    tx_type: &str,
+    amount: &str,
+    category: &str,
+    note: &str,
+    date: &str,
+) -> Result<Transaction, String> {
+    let old = get(conn, id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("记录不存在: {}", id))?;
+
+    check_category(conn, tx_type, category)?;
+    let cents = parse_amount_to_cents(amount)?;
+    let d = parse_date(date)?;
+    let next_date = d.format("%Y-%m-%d").to_string();
+    let note = normalize_note(note)?;
+
+    if next_date != old.date {
+        let diff = (d - today()).num_days().abs();
+        if diff > EDIT_DATE_MAX_DAYS {
+            return Err(format!("日期必须在今天前后 {} 天内", EDIT_DATE_MAX_DAYS));
+        }
+    }
+
+    conn.execute(
+        "UPDATE transactions
+         SET type = ?1, amount_cents = ?2, category = ?3, note = ?4, date = ?5
+         WHERE id = ?6",
+        params![tx_type, cents, category, note, next_date, id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    get(conn, id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "记录不存在".into())
+}
+
 pub fn delete(conn: &Connection, id: &str) -> Result<bool, String> {
     let changed = conn
         .execute("DELETE FROM transactions WHERE id = ?1", params![id])
@@ -942,6 +984,55 @@ mod tests {
         assert!(
             update_category(&conn, "food", "伙食", "utensils", "#FF9500").is_ok(),
             "改成不重复的名字应允许"
+        );
+    }
+
+    /// 详情页「编辑」：类型 / 金额 / 分类 / 备注 / 日期一次更新，录入时间不变
+    #[test]
+    fn update_full_changes_all_fields() {
+        let conn = mem_db();
+        let today_s = today().format("%Y-%m-%d").to_string();
+        let t = add(&conn, "expense", "12.00", "food", "午饭", &today_s).unwrap();
+
+        let updated = update_full(&conn, &t.id, "income", "88.5", "salary", "  工资  ", &today_s)
+            .unwrap();
+        assert_eq!(updated.tx_type, "income");
+        assert_eq!(updated.amount, "88.50");
+        assert_eq!(updated.category, "salary");
+        assert_eq!(updated.note, "工资", "备注应被 trim");
+        assert_eq!(updated.created_at, t.created_at, "编辑不能改录入时间");
+    }
+
+    /// 编辑时类型与分类必须同向，否则支出记录会被贴上收入分类
+    #[test]
+    fn update_full_rejects_cross_type_category() {
+        let conn = mem_db();
+        let today_s = today().format("%Y-%m-%d").to_string();
+        let t = add(&conn, "expense", "12.00", "food", "", &today_s).unwrap();
+
+        assert!(
+            update_full(&conn, &t.id, "expense", "12.00", "salary", "", &today_s).is_err(),
+            "支出记录不能选收入分类"
+        );
+        let kept = get(&conn, &t.id).unwrap().unwrap();
+        assert_eq!(kept.category, "food", "被拒的更新不能落库");
+    }
+
+    /// 原日期超窗但未改动时应放行（与 update_date 口径一致）
+    #[test]
+    fn update_full_allows_resaving_out_of_window_date() {
+        let conn = mem_db();
+        let t = add(&conn, "expense", "5.00", "food", "", "1999-01-01").unwrap();
+
+        assert!(
+            update_full(&conn, &t.id, "expense", "6.00", "food", "改金额", "1999-01-01").is_ok(),
+            "原样保存超窗日期应放行"
+        );
+
+        let far = (today() - chrono::Duration::days(400)).format("%Y-%m-%d").to_string();
+        assert!(
+            update_full(&conn, &t.id, "expense", "6.00", "food", "", &far).is_err(),
+            "改成另一个超窗日期仍应拒绝"
         );
     }
 }

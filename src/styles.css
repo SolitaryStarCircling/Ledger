@@ -371,7 +371,7 @@ html, body {
 /* ============ 列表 ============ */
 .day-group { margin-bottom: 22px; animation: fadeUp .45s cubic-bezier(.2,.8,.2,1) backwards; }
 
-/* 静默重绘：数据原地变更（删除 / 改金额 / 改备注 / 批量改分类 / 导入等）后重建列表时，
+/* 静默重绘：数据原地变更（删除 / 记录编辑 / 批量改分类 / 导入等）后重建列表时，
    不给 .day-group / .cat-row / .empty-state 播入场动画。
    这些入场都依赖 backwards 填充，重建瞬间整片内容 opacity:0；
    若此刻屏幕上没有弹层遮罩遮挡（典型：侧滑删除），就会闪一下整屏。
@@ -860,6 +860,123 @@ html, body {
   letter-spacing: -0.2px;
 }
 
+/* ============ 记录详情页（单击流水行进入） ============ */
+.txd-hero {
+  padding: 6px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.txd-amount {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  cursor: pointer;
+  transition: transform .16s ease, opacity .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.txd-amount:active { transform: scale(.97); opacity: .8; }
+.txd-amount.income { color: var(--green); }
+.txd-type {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  cursor: pointer;
+  transition: transform .16s ease, opacity .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.txd-type:active { transform: scale(.97); opacity: .82; }
+.txd-type.income {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+}
+.txd-card {
+  margin: 0 16px;
+  background: var(--card);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--sh-2), inset 0 0 0 0.5px var(--hairline);
+}
+.txd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 18px;
+  min-height: 54px;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.txd-row:active { background: var(--fill); }
+.txd-row:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.txd-row + .txd-row { border-top: 0.5px solid var(--sep); }
+.txd-label { flex: none; font-size: 14px; color: var(--text3); }
+.txd-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.txd-chev {
+  flex: none;
+  width: 16px; height: 16px;
+  display: grid; place-items: center;
+  color: var(--text3);
+  opacity: .7;
+}
+.txd-chev svg { width: 15px; height: 15px; display: block; }
+.txd-stack { flex-direction: column; align-items: flex-end; gap: 3px; }
+.txd-sub { font-size: 12px; color: var(--text3); font-variant-numeric: tabular-nums; }
+.txd-cat-ic {
+  flex: none;
+  width: 28px; height: 28px;
+  border-radius: 9px;
+  display: grid; place-items: center;
+  background: var(--fill);
+}
+.txd-cat-ic svg { width: 17px; height: 17px; display: block; }
+#txdNote.empty { color: var(--text3); }
+/* 详情页备注输入面板：输入框在 action-sheet 内的左右留白 */
+.txd-field-body { padding: 2px 4px 4px; }
+.txd-actions {
+  display: flex;
+  gap: 12px;
+  margin: 22px 16px 0;
+}
+.txd-btn {
+  flex: 1;
+  height: 50px;
+  border-radius: var(--r-md);
+  font-size: 16px;
+  font-weight: 600;
+  transition: transform .18s, background .18s;
+}
+.txd-btn:active { transform: scale(0.97); }
+.txd-btn.danger {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+.txd-btn.primary {
+  color: #fff;
+  background: var(--blue);
+  box-shadow: 0 6px 16px -8px var(--blue);
+}
+
 /* ============ Tab Bar 悬浮胶囊 ============ */
 /* 整条栏只负责排布这一行：宽屏时只放居中的胶囊（设置单独悬浮在右侧），
    窄屏时把设置并进同一行，两个控件永远不会互相挤压 */
@@ -1063,7 +1180,8 @@ html, body {
   color: var(--red);
 }
 .amount-display.income .num { color: var(--green); }
-.amount-display.shake { animation: shake .4s cubic-bezier(.36,.07,.19,.97); }
+.amount-display.shake,
+.edit-amount-display.shake { animation: shake .4s cubic-bezier(.36,.07,.19,.97); }
 @keyframes shake {
   10%, 90% { transform: translateX(-2px); }
   20%, 80% { transform: translateX(4px); }
@@ -1421,45 +1539,6 @@ html, body {
   padding: 10px 4px 0;
 }
 .edit-actions .action-btn { flex: 1; height: 48px; font-size: 16px; }
-
-.edit-date-list {
-  max-height: 320px;
-  overflow-y: auto;
-  background: var(--card);
-  border-radius: var(--r-sm);
-  padding: 0;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  position: relative;
-}
-.date-month-header {
-  position: sticky;
-  top: 0;
-  background: var(--card);
-  padding: 8px 18px 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text2);
-  letter-spacing: 0.3px;
-  z-index: 1;
-  border-top: 0.5px solid var(--sep);
-  border-bottom: 0.5px solid var(--sep);
-}
-.date-month-header:first-child { border-top: none; }
-.edit-date-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 18px;
-  font-size: 15px;
-  transition: background .15s;
-  cursor: pointer;
-}
-.edit-date-item + .edit-date-item { border-top: 0.5px solid var(--sep); }
-.edit-date-item:active { background: var(--fill); }
-.edit-date-item.active { color: var(--blue); font-weight: 600; }
-.edit-date-item .check { opacity: 0; color: var(--blue); font-weight: 700; }
-.edit-date-item.active .check { opacity: 1; }
 
 .month-picker {
   display: grid;
@@ -1961,6 +2040,8 @@ html, body {
   justify-content: center;
   padding: 2px 0 10px;
 }
+/* display:flex 会盖过 UA 的 [hidden]，显式补回（编辑账目时整行隐藏） */
+.fav-row[hidden] { display: none; }
 .fav-btn {
   display: inline-flex;
   align-items: center;

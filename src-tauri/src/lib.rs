@@ -68,6 +68,21 @@ fn update_note(
     service::update_note(&conn, &id, &note)
 }
 
+/// 整条更新（详情页「编辑」）：一次改掉类型 / 金额 / 分类 / 备注 / 日期
+#[tauri::command]
+fn update_tx(
+    state: DbState<'_>,
+    id: String,
+    tx_type: String,
+    amount: String,
+    category: String,
+    note: String,
+    date: String,
+) -> Result<models::Transaction, String> {
+    let conn = state.lock().map_err(|e| e.to_string())?;
+    service::update_full(&conn, &id, &tx_type, &amount, &category, &note, &date)
+}
+
 #[tauri::command]
 fn delete_tx(state: DbState<'_>, id: String) -> Result<bool, String> {
     let conn = state.lock().map_err(|e| e.to_string())?;
@@ -531,6 +546,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_all,
             add_tx,
+            update_tx,
             update_amount,
             update_date,
             update_note,
