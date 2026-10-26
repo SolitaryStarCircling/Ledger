@@ -1,6 +1,6 @@
 # Ledger Architecture
 
-> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.7.0 (commit to be back-filled after the commit) ｜ **Last verified**: 2026-10-26
+> **Language**: [简体中文](./ARCHITECTURE.md) ｜ **Baseline**: v1.7.1 (commit to be back-filled after the commit) ｜ **Last verified**: 2026-10-26
 
 **One line**: Ledger is an offline-first personal expense tracker — a Tauri v2 + Rust + SQLite single-machine core with a front end that has no framework, no bundler and no build step.
 
@@ -8,7 +8,7 @@
 |---|---|
 | Audience | GitHub visitors reading the code, developers taking over or extending it, users verifying implementation details |
 | Relationship to README | [README.md](./README.md) answers "what is this / how do I use it / what features exist"; this document answers "how the system is put together / why the key decisions were made that way / where the capability boundary sits". Feature lists and installation steps are not repeated here |
-| Data source | Every number below was measured from the v1.7.0 source (2026-10-26). Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
+| Data source | Every number below was measured from the v1.7.1 source (2026-10-26). Where README values have gone stale (line counts, "0 npm dependencies"), this document is authoritative — see [§8 Key design decisions](#8-key-design-decisions-and-trade-offs) and [§11 Build--test--release](#11-build--test--release) |
 
 ---
 
@@ -92,8 +92,8 @@ flowchart TB
 | File | Lines | Responsibility |
 |---|---:|---|
 | `src/index.html` | 805 | All page structure: home / record detail / stats / category detail / settings, plus the entry sheet, calendar, panels, lock overlay and batch-action bar |
-| `src/main.js` | 4667 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack; 18 section anchors navigable from the header comment |
-| `src/styles.css` | 2555 | All styling: theme variables, components, motion |
+| `src/main.js` | 4724 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack; 18 section anchors navigable from the header comment |
+| `src/styles.css` | 2561 | All styling: theme variables, components, motion |
 | `src/vendor/xlsx.full.min.js` | 951,904 B (≈ 929.6 KB) | SheetJS 0.20.3, shipped in-repo (offline + CVE avoidance), lazily loaded only on the Excel import path |
 | `src/vendor/README.md` | — | Origin, hash and upgrade steps for the vendored file |
 
@@ -347,18 +347,21 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 
 | Mechanism | Implementation notes | Source |
 |---|---|---|
-| Panel registry | Every sheet/modal lives in the `allPanels` array; `openModal` / `closeModal` toggle them and handle cancellation uniformly (including the detail-page amount / type / note panels) — **a new panel that is not registered shows up as "black screen, no response"** | `main.js#L1548-L1551` |
-| Panel exclusivity | `activePanel` tracks the current overlay (the detail-page category picker shares `#batchCatSheet` with batch re-categorisation and is routed by `txdCatCtx`) so keyboard events and "back" act on the overlay first, preventing event bleed-through | `main.js#L1553` |
-| Entry state | `curType` ("expense"/"income") plus `editingTemplateId` / `editingTxId` (both null = new entry; the first non-null = editing a quick template; the second non-null = editing a transaction), which routes saving to `add_tx` / `update_template` / `update_tx` | `main.js#L2664-L2668`, `#L2933` |
-| Save re-entry guard | The `savingTx` flag with `if (savingTx) return`, preventing a double-tap or double-Enter from recording two transactions | `main.js#L2899`, `#L2910` |
-| View month | `viewMonth` (`YYYY-MM`); switching months must call `loadBudget()` again, otherwise the previous month's budget lingers | `main.js#L275`, `#L2152-L2157` |
-| Lock overlay | Defaults to `display:none`, shown only when JS removes the `hidden` attribute; going to the background (`visibilitychange` + `document.hidden` while the lock is enabled) re-locks | `index.html#lockOverlay`, `main.js#L4463-L4471`, `#L4610-L4611` |
-| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4654-L4660` |
-| Date picker guard | New entries page within the current month ±2; edits and detail-page date changes page within ±1 year (`calRange()` supplies `min`/`max` and the arrows are disabled at the edges); out-of-range days render as non-clickable `.cal-day.off` | `main.js#L2768-L2781` (guard at `#L2808`) |
-| Month view range | The home page allows switching within "12 months back to 3 months forward" (`monthShiftAllowed`) | `main.js#L2144-L2150` |
-| Theme | Three states: follow the system (`prefers-color-scheme`), explicit `data-theme="dark"`, explicit `data-theme="light"` | `styles.css#L59-L127`, `main.js#L4396-L4421` |
-| Report date picker | After picking "Day" in the "Balance range" sheet, the date list shows **only dates that actually have records** (aggregated from `txs`, deduplicated, newest first) instead of a fixed "last 12 days / next 3 days" window; each row shows that day's expense/income, and an empty state appears when there are no records | `main.js#L2093-L2125` |
+| Panel registry | Every sheet/modal lives in the `allPanels` array; `openModal` / `closeModal` toggle them and handle cancellation uniformly (including the detail-page amount / type / note panels) — **a new panel that is not registered shows up as "black screen, no response"** | `main.js#L1550-L1553` |
+| Panel exclusivity | `activePanel` tracks the current overlay (the detail-page category picker shares `#batchCatSheet` with batch re-categorisation and is routed by `txdCatCtx`) so keyboard events and "back" act on the overlay first, preventing event bleed-through | `main.js#L1555` |
+| Entry state | `curType` ("expense"/"income") plus `editingTemplateId` / `editingTxId` (both null = new entry; the first non-null = editing a quick template; the second non-null = editing a transaction), which routes saving to `add_tx` / `update_template` / `update_tx` | `main.js#L2721-L2725`, `#L2990` |
+| Save re-entry guard | The `savingTx` flag with `if (savingTx) return`, preventing a double-tap or double-Enter from recording two transactions | `main.js#L2954`, `#L2957` |
+| View month | `viewMonth` (`YYYY-MM`); switching months must call `loadBudget()` again, otherwise the previous month's budget lingers | `main.js#L275`, `#L2207-L2212` |
+| Lock overlay | Defaults to `display:none`, shown only when JS removes the `hidden` attribute; going to the background (`visibilitychange` + `document.hidden` while the lock is enabled) re-locks | `index.html#lockOverlay`, `main.js#L4520-L4529`, `#L4667-L4668` |
+| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4711-L4717` |
+| Date picker guard | New entries page within the current month ±2; edits and detail-page date changes page within ±1 year (`calRange()` supplies `min`/`max` and the arrows are disabled at the edges); out-of-range days render as non-clickable `.cal-day.off` | `main.js#L2825-L2838` (guard at `#L2865-L2870`) |
+| Month view range | The home page allows switching within "12 months back to 3 months forward" (`monthShiftAllowed`) | `main.js#L2199-L2205` |
+| Theme | Three states: follow the system (`prefers-color-scheme`), explicit `data-theme="dark"`, explicit `data-theme="light"` | `styles.css#L59-L127`, `main.js#L4453-L4478` |
+| Report date picker | After picking "Day" in the "Balance range" sheet, the date list shows **only dates that actually have records** (aggregated from `txs`, deduplicated, newest first) instead of a fixed "last 12 days / next 3 days" window; each row shows that day's expense/income, and an empty state appears when there are no records | `main.js#L2148-L2180` |
 | Input debounce | Quick-template chips reject repeat taps within 350 ms; a 500 ms long press enters multi-select (cancelled by a horizontal swipe or > 8 px jitter) | `main.js`, quick-template and list-gesture sections |
+| Touch ghost click | A row tap consumed on `pointerup` / `touchend` always cancels the synthesised click; the detail-page switch adds a 450 ms click-swallowing window so the same touch cannot hit a field row or bottom button at the new page's coordinates | `main.js#L609-L621`, `#L1983-L1991` |
+| Soft-keyboard adaptation | Native layer turns the IME bottom inset into root-container `padding-bottom` (`adjustResize` in `AndroidManifest.xml`), so once the WebView shrinks a `bottom:0` sheet naturally sits above the keyboard; JS also listens to `visualViewport` and `window resize` as a fallback lift, restoring on keyboard dismissal or panel close | `AndroidManifest.xml#L18`, `MainActivity.kt#L28-L38`, `main.js#L1993-L2026` |
+| Bottom navigation visibility | The record detail page is a second-level page: on entry `detail-open` is added to `#app` and CSS hides `.tabbar` / `.tab-settings` / `.fab`, leaving only the header back button; closing the detail page, switching tabs or opening the category detail page removes the class, so first-level pages (home / stats / settings) keep their navigation | `main.js#L1741`, `#L1784`, `#L2585`, `#L2623`, `styles.css#L1808-L1812` |
 
 ---
 
@@ -417,7 +420,7 @@ Model output is frequently malformed (especially from small models), so parsing 
 
 ### 7.4 Cache and clearing
 
-Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (written by the front end, see `main.js#L4179`, `#L4232`); `ai_clear_analyses` deletes everything with the `ai_analysis_` prefix, touching only the cache and never transactions or keys. Whether notes are sent to the AI is controlled by `ai_include_notes`, and first use requires consent via `ai_privacy_accepted`.
+Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (written by the front end, see `main.js#L4236`, `#L4289`); `ai_clear_analyses` deletes everything with the `ai_analysis_` prefix, touching only the cache and never transactions or keys. Whether notes are sent to the AI is controlled by `ai_include_notes`, and first use requires consent via `ai_privacy_accepted`.
 
 ---
 
@@ -468,7 +471,7 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 | Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L521-L522`); recovery relies on backups |
 | PIN brute-force resistance | No attempt limit and no delay |
 | Import scope | Excludes settings; backups missing newer tables are incompatible |
-| Front-end size | A single 4667-line `main.js` with no module split; readability relies on the 18-section navigation comment at the top plus matching anchors. Split triggers: file exceeds 6000 lines, a feature touches 3+ sections, or a function is called from 3+ sections with drifting semantics |
+| Front-end size | A single 4724-line `main.js` with no module split; readability relies on the 18-section navigation comment at the top plus matching anchors. Split triggers: file exceeds 6000 lines, a feature touches 3+ sections, or a function is called from 3+ sections with drifting semantics |
 | Query scale | Full load plus front-end filtering; no pagination or virtual list, and very large ledgers (10k+ rows) have not been performance-verified |
 
 **Divergence from the early course documents**: several descriptions in the project's early document set (`ledger document/`, never under version control) no longer match reality and are not carried over here. Three typical cases: (1) its UI spec describes iOS system colours (`#F2F2F7` / `#007AFF` / 24 px corners) while the current theme is a warm neutral paper feel with dark indigo accents, measured in §13; (2) its database document describes a single table while there are five (§4); (3) its test plan claims "editing the date to 400 days ago is always rejected" (now the opposite: re-saving an **unchanged** date is allowed) and "a corrupted data file falls back to an empty ledger", which is not implemented in code.
@@ -481,8 +484,8 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 ledger/
 ├── src/                          Front end (plain HTML/CSS/JS, no build)
 │   ├── index.html                805 lines · all page structure
-│   ├── styles.css                2555 lines · theme variables and all styling
-│   ├── main.js                   4667 lines · all logic (ES module)
+│   ├── styles.css                2561 lines · theme variables and all styling
+│   ├── main.js                   4724 lines · all logic (ES module)
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3, shipped in-repo (951,904 B)
 │       └── README.md             origin / SHA-256 / upgrade steps
@@ -746,7 +749,7 @@ Category detail page · Record detail page · Settings page · Lock overlay
 |---|---|
 | `curType` + `editingTemplateId` / `editingTxId` | Three sheet modes: new entry (both null), edit a quick template (`editingTemplateId` set, restores type/amount/category/note and hides the date row), edit a transaction (`editingTxId` set, restores the whole record and hides the quick-template row); the last two are mutually exclusive |
 | `txDetailId` + `txDetailOrigin` | The record shown on the detail page and its origin (`home` / `catdetail`); the back stack seeds the origin layers from it, and delete/edit refresh the corresponding lists |
-| `txdCatCtx` / `calDetailTxId` / `txdAmountStr` | Temporary context for detail-page field edits: the single record and target type for the category picker, the record id for the calendar, and the input string for the amount panel; `closeModal()` clears all three so a reused panel never carries stale context (batch re-categorisation and single-record re-categorisation share `#batchCatSheet`, routed by `txdCatCtx`) |
+| `txdCatCtx` / `calDetailTxId` / `txdAmountStr` / `txDetailOpenedAt` / `txdNoteVVHandler` | Temporary context for detail-page field edits: the single record and target type for the category picker, the record id for the calendar, and the input string for the amount panel; plus the detail-page open timestamp (a 450 ms window that swallows Android's synthesised click) and the note sheet's `visualViewport` listener. `closeModal()` clears the first three and removes the keyboard listener so a reused panel never carries stale context (batch re-categorisation and single-record re-categorisation share `#batchCatSheet`, routed by `txdCatCtx`) |
 | `activePanel` | When an overlay is open, keyboard events and "back" act on the overlay first, preventing bleed-through |
 | `allPanels` | Panels are registered centrally with shared `show`/`hide` and cancel handling |
 | `viewMonth` | Switching months must call `loadBudget()`; the budget is bound to the month and never carried over silently |
@@ -850,6 +853,7 @@ The front end currently has **no automated test framework**. The cases below mus
 | U-17 | No flicker after an in-place change | After a swipe-delete / editing a record (whole-record update) / detail-page field edits / delete / batch re-categorise / import / clear, the list is **rebuilt as a whole but without replaying its entry animation** (no full-list fade-out-then-fade-in flicker); a swipe-delete goes further and uses an **in-place patch** that never rebuilds the whole list DOM; first entry, month switch, tab switch and search filtering — paths that genuinely change the view — still play the entry animation (§14.3) |
 | U-18 | Report "Balance range → Day" date picker | The date list shows only dates that actually have records (newest first), each row showing that day's expense/income; any historical date with data can be selected and correctly shows that day's balance; dates without records are absent from the list; an empty state appears for an empty ledger (§5.2) |
 | U-19 | Record detail / edit | Amount sign and colour are correct (income green); an empty note shows "无"; records without `createdAt` hide the "录入于" sub-line; entering from search results and going back keeps the search results; deleting from the detail page returns to the origin page with no list flicker; the edit sheet hides the quick-template row and, after saving, the detail page, home list and stats page all refresh; switching expense → income in edit mode swaps the category grid; **the amount can be edited and must be >0; a type switch requires picking a new-type category and cancelling leaves the type unchanged; tapping a category saves immediately; picking the same date writes nothing and a cross-month move syncs the home month; clearing the note and saving shows "无"; for each of the five sheets, back closes the sheet first and the detail page stays** |
+| U-20 | Android touch / soft keyboard | Tapping a row opens the detail page without any field panel popping up (the synthesised click from the same touch is swallowed) and desktop mouse input is unaffected; tapping the note row shows the IME with the input and "Save" visible and usable; closing the keyboard drops the panel back to the bottom; cancelling / saving restores both panel and keyboard state |
 
 > Divergence from the early course documents: their T-07 has been rewritten to match reality (moving a date to another out-of-window value is still rejected, but re-saving an **unchanged** out-of-window date is allowed — see §5.1), and T-14 "a corrupted data file falls back to an empty ledger" does not exist in the implementation (see §9), so it is dropped and not used as an acceptance case.
 
@@ -879,4 +883,4 @@ The front end currently has **no automated test framework**. The cases below mus
 
 ---
 
-**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.7.0 (commit to be back-filled after the commit); after code changes, please re-verify the line numbers and measured figures listed here.
+**Maintained by**: SolitaryStarCircling (project author) · This document matches baseline v1.7.1 (commit to be back-filled after the commit); after code changes, please re-verify the line numbers and measured figures listed here.

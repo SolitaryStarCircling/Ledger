@@ -612,9 +612,11 @@ function bindSwipe(row) {
     if (dragging) {
       onUp({ type: 'touchend', clientX: t.clientX, clientY: t.clientY });
     } else {
-      const willTap = !tapHandled;
       fireTap();
-      if (willTap && e.cancelable) e.preventDefault();
+      // 点按已在 pointerup / 本回调里消费，无论哪条通道先处理，都要掐掉浏览器
+      // 随后补发的合成 click：此时页面可能已经切走，click 会落到新页面同坐标的
+      // 元素上（安卓上表现为「进详情页后立刻又弹出某个字段面板」）。
+      if (e.cancelable) e.preventDefault();
     }
   }, { passive: false });
 
@@ -1558,6 +1560,8 @@ let txDetailOrigin = 'home';  // 全局：详情页来源页，决定返回去�
 let txdCatCtx = null;         // 非空 = 分类面板在为详情页单条记录服务 { id, type }
 let calDetailTxId = null;     // 非空 = 日历面板在为详情页改日期
 let txdAmountStr = '0';       // 详情页金额面板的输入串
+let txDetailOpenedAt = 0;     // 详情页打开时刻，用于吞掉安卓补发的「幽灵 click」
+let txdNoteVVHandler = null;  // 备注面板的 visualViewport 监听器（软键盘适配）
 
 let monthPickerCallback = null;
 let weekPickerCallback = null;
@@ -1596,6 +1600,7 @@ function closeModal() {
   calDetailTxId = null;
   txdAmountStr = '0';
   $('#txdNoteInput').blur();
+  detachTxdNoteKeyboardLift();
   syncBackState();
 }
 
@@ -1733,7 +1738,9 @@ function openTxDetail(id) {
   ['page-home', 'page-stats', 'page-catdetail', 'page-txdetail'].forEach(pid => {
     $('#' + pid).classList.toggle('active', pid === 'page-txdetail');
   });
+  $('#app').classList.add('detail-open');   // 二级页面：隐藏底部导航
   window.scrollTo(0, 0);
+  txDetailOpenedAt = Date.now();
   syncBackState();
 }
 
@@ -1772,7 +1779,9 @@ function closeTxDetail() {
   txDetailId = null;
   txdCatCtx = null;
   calDetailTxId = null;
+  txDetailOpenedAt = 0;
   $('#page-txdetail').classList.remove('active');
+  $('#app').classList.remove('detail-open');
   const back = txDetailOrigin === 'catdetail' ? '#page-catdetail' : '#page-home';
   $(back).classList.add('active');
   syncBackState();
@@ -1939,6 +1948,7 @@ function openDetailNote() {
   const input = $('#txdNoteInput');
   input.value = tx.note || '';
   openModal(txdNoteSheet);
+  attachTxdNoteKeyboardLift();
   setTimeout(() => {
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
@@ -1969,6 +1979,51 @@ $('#txdType').addEventListener('click', openDetailType);
 $('#txdRowCat').addEventListener('click', openDetailCatRow);
 $('#txdRowDate').addEventListener('click', openDetailCal);
 $('#txdRowNote').addEventListener('click', openDetailNote);
+
+// 安卓兜底（部分机型 touchend 不可取消）：进入详情页后浏览器补发的合成 click
+// 仍可能落到新页面的字段行 / 底部按钮上。打开后的极短时间内吞掉所有点击；
+// 桌面端 click 的目标是按下时的流水行，不会命中详情页，因此无影响。
+$('#page-txdetail').addEventListener('click', e => {
+  if (Date.now() - txDetailOpenedAt < 450) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
+
+/* ---- 备注面板的软键盘适配 ---- */
+/* 主修复在原生层（MainActivity.kt）：把 IME 占用的底部高度做成根容器 padding-bottom，
+   WebView 变矮后 bottom:0 的面板自然落在键盘之上。这里是 WebView 不跟随窗口
+   收缩、只更新 visualViewport 时的第二道保险：按键盘高度把面板抬起来；
+   键盘收起（inset 归零）自动落回底部，关闭面板即移除监听并还原。 */
+function attachTxdNoteKeyboardLift() {
+  const vv = window.visualViewport;
+  txdNoteVVHandler = () => {
+    if (!txdNoteSheet.classList.contains('show')) return;
+    if (!vv) return;
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    txdNoteSheet.style.bottom = inset > 0 ? inset + 'px' : '';
+  };
+  if (vv) {
+    vv.addEventListener('resize', txdNoteVVHandler);
+    vv.addEventListener('scroll', txdNoteVVHandler);
+  }
+  window.addEventListener('resize', txdNoteVVHandler);
+  txdNoteVVHandler();
+  setTimeout(txdNoteVVHandler, 350);   // 键盘弹出有延迟，补算一次
+}
+
+function detachTxdNoteKeyboardLift() {
+  const vv = window.visualViewport;
+  if (txdNoteVVHandler) {
+    if (vv) {
+      vv.removeEventListener('resize', txdNoteVVHandler);
+      vv.removeEventListener('scroll', txdNoteVVHandler);
+    }
+    window.removeEventListener('resize', txdNoteVVHandler);
+  }
+  txdNoteVVHandler = null;
+  txdNoteSheet.style.bottom = '';
+}
 
 
 function showConfirmDelete() { openModal('alert'); }
@@ -2527,6 +2582,7 @@ if (_statsViewSeg) _statsViewSeg.addEventListener('click', e => {
 function switchTab(name) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+  $('#app').classList.remove('detail-open');   // 回到一级页面，恢复底部导航
   // 财报页内含「图表 / AI 分析」两个视图，进入时按当前视图渲染
   if (name === 'stats') setTimeout(() => setStatsView(statsView), 60);
   if (name === 'settings') { updateRecordCount(); renderBudgetSettingRow(); renderAiSettingsRows(); renderLockSettingRow(); }
@@ -2564,6 +2620,7 @@ function openCatDetail(catId, type) {
   renderCatDetail(catId, curCatType);
   // 不走 switchTab：财报 tab 保持高亮，返回/切 tab 由各自监听处理
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-catdetail'));
+  $('#app').classList.remove('detail-open');   // 分类明细页保留底部导航
   const page = $('#page-catdetail');
   if (page) page.scrollTop = 0;
   syncBackState();

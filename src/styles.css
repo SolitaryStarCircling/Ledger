@@ -1805,6 +1805,12 @@ html, body {
 .app.select-mode .tabbar,
 .app.select-mode .tab-settings { display: none; }
 
+/* 记录详情页是二级页面：底部悬浮导航不跟随，只留顶栏返回键；
+   一级页面（明细 / 财报 / 设置）仍保留导航。 */
+.app.detail-open .fab,
+.app.detail-open .tabbar,
+.app.detail-open .tab-settings { display: none; }
+
 .tx-row.is-selected .tx-content { background: rgba(0,122,255,0.10); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .tx-row.is-selected .tx-content {

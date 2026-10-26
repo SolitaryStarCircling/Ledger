@@ -15,6 +15,30 @@
 
 ---
 
+## [1.7.1] — 2026-10-26
+
+提交链接待提交后回填 · tag 待发布。以下改动由 `git diff` 逐条核对得出。
+
+**修复**
+
+- **安卓真机「进详情页又弹出字段面板」**：单击流水是在 `pointerup` / `touchend` 上消费的，页面切到详情页后浏览器补发的合成 `click` 会落在新页面同坐标的字段行或底部按钮上。现在 `touchend` 在点按被消费后一律 `preventDefault` 掐掉合成 click，并在详情页打开后的 450ms 内再兜底吞掉所有点击。桌面端 click 的目标是按下时的流水行，不受影响
+- **安卓输入法遮挡详情页备注输入框**：`#txdNoteSheet` 固定在 `bottom: 0`。根因是 `enableEdgeToEdge()` 之后系统不再为输入法缩小窗口，且 `visualViewport` 在该 WebView 里不随键盘变化，纯前端探测拿不到键盘高度。现在由原生层兜底：`AndroidManifest.xml` 为 Activity 设置 `adjustResize`，`MainActivity.kt` 监听 IME inset 并把键盘高度转成根容器 `padding-bottom`，WebView 变矮后固定在底部的面板自然落在键盘上方；JS 同时保留 `visualViewport` / `window resize` 监听作为 WebView 自行收缩时的第二道保险。键盘收起即归零，关闭面板移除监听并还原样式
+
+**调整**
+
+- **记录详情页不再显示底部悬浮导航**：详情页是二级页面，进入时给 `#app` 加 `detail-open`，CSS 隐藏 `.tabbar` / `.tab-settings` / `.fab`，只保留顶栏返回键；关闭详情、切 tab、打开分类明细页时移除该类，明细 / 财报 / 设置等一级页面的导航不受影响
+
+**测试**
+
+- 前端：`node --check` 通过；无后端改动，`cargo test` 仍 27 个用例（26 通过 + 1 ignored）
+- 安卓：`:app:compileArmDebugKotlin` 与 `:app:processArmDebugMainManifest` 编译通过，Kotlin / Manifest 改动可用
+
+**版本号**：`1.7.0` → `1.7.1`（`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock` 四处同步）
+
+**对应代码改动**：`src/main.js` +59/−2、`src/styles.css` +6、`src-tauri/gen/android/app/src/main/java/com/tauri_app/ledger/MainActivity.kt` +14、`src-tauri/gen/android/app/src/main/AndroidManifest.xml` +1
+
+---
+
 ## [1.7.0] — 2026-10-26
 
 提交链接 [3cd9df0](https://github.com/SolitaryStarCircling/Ledger/commit/3cd9df0) · tag [v1.7.0](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.7.0)。以下改动由 `git diff` 逐条核对得出。

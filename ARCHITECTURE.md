@@ -1,6 +1,6 @@
 # Ledger 架构文档
 
-> **语言**：[English](./ARCHITECTURE.en.md) ｜ **基线版本**：v1.7.0（commit 待提交后回填）｜ **最后核对**：2026-10-26
+> **语言**：[English](./ARCHITECTURE.en.md) ｜ **基线版本**：v1.7.1（commit 待提交后回填）｜ **最后核对**：2026-10-26
 
 **一句话定位**：Ledger 是一个离线优先（offline-first）的个人记账本 —— Tauri v2 + Rust + SQLite 单机内核，前端零框架、零打包器、零构建步骤。
 
@@ -8,7 +8,7 @@
 |---|---|
 | 读者对象 | 想读代码的 GitHub 访客、准备接手或二次开发的开发者、需要核对实现细节的使用者 |
 | 与 README 的关系 | [README.md](./README.md) 回答「这是什么 / 怎么用 / 有哪些功能」；本文回答「系统怎么搭起来的 / 关键决策为什么这么定 / 能力边界止于何处」。功能清单与安装步骤不在本文重复 |
-| 数据来源 | 全文所有数字均自 v1.7.0 源码实测（2026-10-26）。README 中已过期的数值（行数、"0 npm 依赖"等）以本文为准，详见 [§8 关键设计决策](#8-关键设计决策与取舍) 与 [§11 构建--测试--发布](#11-构建--测试--发布) |
+| 数据来源 | 全文所有数字均自 v1.7.1 源码实测（2026-10-26）。README 中已过期的数值（行数、"0 npm 依赖"等）以本文为准，详见 [§8 关键设计决策](#8-关键设计决策与取舍) 与 [§11 构建--测试--发布](#11-构建--测试--发布) |
 
 ---
 
@@ -92,8 +92,8 @@ flowchart TB
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `src/index.html` | 805 | 全部页面结构：明细页 / 记录详情页 / 财报页 / 分类明细页 / 设置页，以及记账面板、日历、弹层、锁屏层、批量操作栏 |
-| `src/main.js` | 4667 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题、返回栈；顶部 18 个分区导航注释 |
-| `src/styles.css` | 2555 | 全部样式：主题变量、组件、动效 |
+| `src/main.js` | 4724 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题、返回栈；顶部 18 个分区导航注释 |
+| `src/styles.css` | 2561 | 全部样式：主题变量、组件、动效 |
 | `src/vendor/xlsx.full.min.js` | 951,904 B（约 929.6 KB） | SheetJS 0.20.3，随包分发（离线 + 规避 CVE），仅 Excel 导入路径按需加载 |
 | `src/vendor/README.md` | — | 该 vendor 文件的来源、哈希、升级步骤 |
 
@@ -347,18 +347,21 @@ CREATE TABLE IF NOT EXISTS settings (
 
 | 机制 | 实现要点 | 出处 |
 |---|---|---|
-| 面板注册表 | 所有弹层集中在 `allPanels` 数组，`openModal/closeModal` 统一开关与取消处理（含详情页金额 / 类型 / 备注三个面板）；**新面板漏注册会表现为「黑屏无反应」** | `main.js#L1548-L1551` |
-| 面板互斥 | `activePanel` 记录当前弹层（详情页分类面板与批量改分类共用 `#batchCatSheet`，靠 `txdCatCtx` 分流），键盘事件与「返回」先关弹层再关面板，避免事件穿透 | `main.js#L1553` |
-| 记账态 | `curType`（"expense"/"income"）与 `editingTemplateId` / `editingTxId`（都为 null = 新记账；前者非空 = 改常用项；后者非空 = 编辑账目），保存据此分流到 `add_tx` / `update_template` / `update_tx` | `main.js#L2664-L2668`、`#L2933` |
-| 保存防重入 | `savingTx` 守卫，`if (savingTx) return`，避免双击/回车重复记一笔 | `main.js#L2899`、`#L2910` |
-| 查看月份 | `viewMonth`（`YYYY-MM`）；切月必须重新 `loadBudget()`，否则会沿用上月的预算额度 | `main.js#L275`、`#L2152-L2157` |
-| 锁屏层 | 默认 `display:none`，仅当 JS 移除 `hidden` 属性时显示；切后台（`visibilitychange` + `document.hidden` 且已启用锁）重新锁定 | `index.html#lockOverlay`、`main.js#L4463-L4471`、`#L4610-L4611` |
-| 分钟级重绘 | 定时器仅在「页面可见**且**跨天」时 `renderHome()`；无条件重绘会让带入场动画的列表每分钟重播动画、还会把已侧滑打开的行收回 | `main.js#L4654-L4660` |
-| 日期选择防呆 | 新建时日历只允许当前月 ±2 个月；编辑账目与详情页改日期为前后 1 年（`calRange()` 给出 `min`/`max`，边界处禁用箭头），超界日期渲染为不可点的 `.cal-day.off` | `main.js#L2768-L2781`（越界置灰在 `#L2808`） |
-| 月份视图范围 | 明细页可切月份限制为「前 12 个月 ~ 后 3 个月」（`monthShiftAllowed`） | `main.js#L2144-L2150` |
-| 主题 | 三态：跟随系统（`prefers-color-scheme`）/ 显式 `data-theme="dark"` / `data-theme="light"` | `styles.css#L59-L127`、`main.js#L4396-L4421` |
-| 财报日期选择 | 「结余范围」面板选「天」后，日期列表**只列账本中确有记录**的日期（扫 `txs` 聚合、去重倒序），不再限制「近 12 天 / 后 3 天」；每行右侧显示当天支出/收入，无记录时给出空态 | `main.js#L2093-L2125` |
+| 面板注册表 | 所有弹层集中在 `allPanels` 数组，`openModal/closeModal` 统一开关与取消处理（含详情页金额 / 类型 / 备注三个面板）；**新面板漏注册会表现为「黑屏无反应」** | `main.js#L1550-L1553` |
+| 面板互斥 | `activePanel` 记录当前弹层（详情页分类面板与批量改分类共用 `#batchCatSheet`，靠 `txdCatCtx` 分流），键盘事件与「返回」先关弹层再关面板，避免事件穿透 | `main.js#L1555` |
+| 记账态 | `curType`（"expense"/"income"）与 `editingTemplateId` / `editingTxId`（都为 null = 新记账；前者非空 = 改常用项；后者非空 = 编辑账目），保存据此分流到 `add_tx` / `update_template` / `update_tx` | `main.js#L2721-L2725`、`#L2990` |
+| 保存防重入 | `savingTx` 守卫，`if (savingTx) return`，避免双击/回车重复记一笔 | `main.js#L2954`、`#L2957` |
+| 查看月份 | `viewMonth`（`YYYY-MM`）；切月必须重新 `loadBudget()`，否则会沿用上月的预算额度 | `main.js#L275`、`#L2207-L2212` |
+| 锁屏层 | 默认 `display:none`，仅当 JS 移除 `hidden` 属性时显示；切后台（`visibilitychange` + `document.hidden` 且已启用锁）重新锁定 | `index.html#lockOverlay`、`main.js#L4520-L4529`、`#L4667-L4668` |
+| 分钟级重绘 | 定时器仅在「页面可见**且**跨天」时 `renderHome()`；无条件重绘会让带入场动画的列表每分钟重播动画、还会把已侧滑打开的行收回 | `main.js#L4711-L4717` |
+| 日期选择防呆 | 新建时日历只允许当前月 ±2 个月；编辑账目与详情页改日期为前后 1 年（`calRange()` 给出 `min`/`max`，边界处禁用箭头），超界日期渲染为不可点的 `.cal-day.off` | `main.js#L2825-L2838`（越界置灰在 `#L2865-L2870`） |
+| 月份视图范围 | 明细页可切月份限制为「前 12 个月 ~ 后 3 个月」（`monthShiftAllowed`） | `main.js#L2199-L2205` |
+| 主题 | 三态：跟随系统（`prefers-color-scheme`）/ 显式 `data-theme="dark"` / `data-theme="light"` | `styles.css#L59-L127`、`main.js#L4453-L4478` |
+| 财报日期选择 | 「结余范围」面板选「天」后，日期列表**只列账本中确有记录**的日期（扫 `txs` 聚合、去重倒序），不再限制「近 12 天 / 后 3 天」；每行右侧显示当天支出/收入，无记录时给出空态 | `main.js#L2148-L2180` |
 | 交互防抖 | 常用项胶囊 350ms 内防连点；长按 500ms 进入多选（横滑/抖动 >8px 取消） | `main.js` 常用项与列表手势段 |
+| 触摸幽灵 click | 行的点按在 `pointerup` / `touchend` 上消费后一律取消合成 click；详情页切换另设 450ms 点击吞掉窗口，避免同一次触摸在新页面同坐标误触字段行 / 底部按钮 | `main.js#L609-L621`、`#L1983-L1991` |
+| 软键盘适配 | 原生层把 IME 底部 inset 转为根容器 `padding-bottom`（`AndroidManifest.xml` 设 `adjustResize`），WebView 变矮后 `bottom:0` 弹层自然落在键盘上方；JS 同时监听 `visualViewport` 与 `window resize` 兜底抬高，键盘收起 / 关闭面板即还原 | `AndroidManifest.xml#L18`、`MainActivity.kt#L28-L38`、`main.js#L1993-L2026` |
+| 底部导航显隐 | 记录详情页是二级页面：进入时给 `#app` 加 `detail-open`，CSS 隐藏 `.tabbar` / `.tab-settings` / `.fab`，只保留顶栏返回键；关闭详情、切 tab、打开分类明细页时移除，一级页面（明细 / 财报 / 设置）保持原有导航 | `main.js#L1741`、`#L1784`、`#L2585`、`#L2623`、`styles.css#L1808-L1812` |
 
 ---
 
@@ -417,7 +420,7 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 
 ### 7.4 缓存与清理
 
-月度分析结果以 `settings` 键 `ai_analysis_<YYYY-MM>` 缓存（前端写入，见 `main.js#L4179`、`#L4232`）；`ai_clear_analyses` 按前缀 `ai_analysis_` 批量删除，只动缓存、不动账目与 Key。前端「是否把备注发给 AI」由 `ai_include_notes` 控制，首次使用需通过 `ai_privacy_accepted` 授权。
+月度分析结果以 `settings` 键 `ai_analysis_<YYYY-MM>` 缓存（前端写入，见 `main.js#L4236`、`#L4289`）；`ai_clear_analyses` 按前缀 `ai_analysis_` 批量删除，只动缓存、不动账目与 Key。前端「是否把备注发给 AI」由 `ai_include_notes` 控制，首次使用需通过 `ai_privacy_accepted` 授权。
 
 ---
 
@@ -468,7 +471,7 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | 损坏数据库 | 打开失败直接返回错误，**不自动回退空库**（`lib.rs#L521-L522`）；用户需靠备份恢复 |
 | PIN 爆破防护 | 无尝试次数限制与延时 |
 | 导入范围 | 不含设置项；缺列的新旧备份不兼容 |
-| 前端规模 | 单文件 `main.js` 4667 行，无模块拆分；靠顶部 18 个分区的导航注释 + 同名锚点维持可读性。拆分触发条件：单文件超 6000 行、新功能需跨 3 个以上分区、同一函数被 3 个以上分区调用且语义漂移 |
+| 前端规模 | 单文件 `main.js` 4724 行，无模块拆分；靠顶部 18 个分区的导航注释 + 同名锚点维持可读性。拆分触发条件：单文件超 6000 行、新功能需跨 3 个以上分区、同一函数被 3 个以上分区调用且语义漂移 |
 | 查询规模 | 全量加载 + 前端过滤；未做分页/虚拟列表，超大账本（万条以上）未做性能验证 |
 
 **与早期课程文档的差异说明**：项目早期文档集（`ledger document/`，从未纳入版本控制）中的若干描述已与现状不符，本文不沿用。典型三处：① 其 UI 规范写的是 iOS 系统色（`#F2F2F7` / `#007AFF` / 24px 圆角），现行主题是暖中性纸感 + 暗靛，实测值见 §13；② 其数据库文档只描述 1 张表，实际为 5 张（§4）；③ 其测试计划中的「改日期为 400 天前一律拒绝」与现状相反（现状允许**未修改日期**的原样保存）、「数据文件损坏回退空账」在代码中并未实现。
@@ -481,8 +484,8 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 ledger/
 ├── src/                          前端（原生 HTML/CSS/JS，无构建）
 │   ├── index.html                805 行 · 全部页面结构
-│   ├── styles.css                2555 行 · 主题变量与全部样式
-│   ├── main.js                   4667 行 · 全部逻辑（ES Module）
+│   ├── styles.css                2561 行 · 主题变量与全部样式
+│   ├── main.js                   4724 行 · 全部逻辑（ES Module）
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3，随包分发（951,904 B）
 │       └── README.md             来源 / SHA-256 / 升级步骤
@@ -740,7 +743,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 |---|---|
 | `curType` + `editingTemplateId` / `editingTxId` | 三者对应三种面板态：新建（都为 null）、修改常用项（`editingTemplateId` 非空，按该常用项回填 type/金额/分类/备注）、编辑账目（`editingTxId` 非空，回填整条记录并隐藏「收藏为常用」）；后两者互斥 |
 | `txDetailId` + `txDetailOrigin` | 详情页当前记录与来源页（`home` / `catdetail`）；返回栈据此垫入来源层，删除 / 编辑后按来源刷新对应列表 |
-| `txdCatCtx` / `calDetailTxId` / `txdAmountStr` | 详情页字段编辑的临时上下文：分类面板的单条记录与目标类型、日历面板的记录 id、金额面板的输入串；`closeModal()` 统一清空，避免面板复用时串味（批量改分类与单条改分类共用 `#batchCatSheet`，靠 `txdCatCtx` 分流） |
+| `txdCatCtx` / `calDetailTxId` / `txdAmountStr` / `txDetailOpenedAt` / `txdNoteVVHandler` | 详情页字段编辑的临时上下文：分类面板的单条记录与目标类型、日历面板的记录 id、金额面板的输入串；另有详情页打开时刻（450ms 内吞掉安卓补发的点击）与备注面板的 `visualViewport` 监听器。`closeModal()` 统一清空前三者并移除键盘监听，避免面板复用时串味（批量改分类与单条改分类共用 `#batchCatSheet`，靠 `txdCatCtx` 分流） |
 | `activePanel` | 有弹层时键盘事件与「返回」优先作用于弹层，避免穿透 |
 | `allPanels` | 面板集中注册；统一 `show/hide` 与取消处理 |
 | `viewMonth` | 切月必须 `loadBudget()`；预算与月份强绑定，不做跨月自动沿用 |
@@ -844,6 +847,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | U-17 | 原地变更后列表不闪 | 侧滑删除 / 编辑保存（整条更新）/ 详情页字段修改 / 删除 / 批量改分类 / 导入 / 清空后，列表**整体重建但不重播入场动画**（不出现整片淡出再淡入的屏闪）；侧滑删除更进一步走**原地修补**、不重建整表 DOM；首次进入、切月、切 tab、搜索过滤这些「内容确实变了」的场景仍正常播放入场动画（§14.3） |
 | U-18 | 财报「结余范围 → 天」日期选择 | 日期列表只列出账本中**有记录**的日期（倒序），每行显示当天支出/收入；任意有数据的历史日期均可选中并正确显示当日结余；无记录的日期不出现在列表中；账本为空时显示空态（§5.2） |
 | U-19 | 记录详情页 / 编辑 | 详情页金额符号与颜色正确（收入绿）；备注为空显示「无」；无 `createdAt` 的旧记录隐藏「录入于」副行；从搜索结果进入详情，返回后仍停在搜索结果；详情页删除后回到来源页且列表无屏闪；编辑面板隐藏「收藏为常用」，保存后详情页、明细列表、财报页同步刷新；编辑中把支出切成收入后分类网格随之切换；**点金额可改并校验 >0；点类型后必选新类型分类，取消则类型不变；点分类点选即存；点日期同日不写库、跨月时首页月份同步；点备注清空保存显示「无」；五个弹层按返回键先关弹层、详情页保留** |
+| U-20 | 安卓触摸 / 软键盘 | 单击流水进入详情页后不再弹出任何字段面板（同一次触摸的合成 click 被吞掉），桌面鼠标不受影响；详情页点备注弹出输入法后输入框与「保存」可见、可输入；收起键盘后面板落回底部；取消 / 保存后面板与键盘状态正常还原 |
 
 > 与早期课程文档的差异：其测试计划的 T-07 已按现状改写（改成另一个超窗日期仍拒绝，但**原样保存**超窗日期放行，见 §5.1）；T-14「数据文件损坏自动回退空账」在实现中并不存在（见 §9），故剔除、不列为验收项。
 
@@ -873,4 +877,4 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 
 ---
 
-**维护**：SolitaryStarCircling（项目作者）· 本文档对应基线 v1.7.0（commit 待提交后回填），代码变更后请同步修订本节所列的行号与实测数字。
+**维护**：SolitaryStarCircling（项目作者）· 本文档对应基线 v1.7.1（commit 待提交后回填），代码变更后请同步修订本节所列的行号与实测数字。

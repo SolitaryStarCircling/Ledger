@@ -1,7 +1,9 @@
 package com.tauri_app.ledger
 
 import android.os.Bundle
+import android.view.View
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
@@ -22,5 +24,17 @@ class MainActivity : TauriActivity() {
         controller.hide(WindowInsetsCompat.Type.statusBars())
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        // 软键盘（IME）适配：enableEdgeToEdge 后系统不再自动缩小窗口，
+        // 输入法会直接盖在 WebView 上，固定在底部的输入面板被挡住。
+        // 这里把 IME 占用的底部高度转成根容器的 padding-bottom：
+        // WebView 可视区域随之上移，CSS 里 bottom:0 的弹层自然落在键盘之上。
+        // 键盘收起时 padding 归零，保持贴边沉浸效果不变。
+        val content = findViewById<View>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, ime)
+            insets
+        }
     }
 }
