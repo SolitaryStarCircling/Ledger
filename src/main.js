@@ -2580,9 +2580,15 @@ if (_statsViewSeg) _statsViewSeg.addEventListener('click', e => {
 
 /* ================= Tab 切换 ================= */
 function switchTab(name) {
+  const tabsNow = $$('.tab');
+  const fromIdx = tabsNow.findIndex(t => t.classList.contains('active'));
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
   $('#app').classList.remove('detail-open');   // 回到一级页面，恢复底部导航
+  const toIdx = tabsNow.findIndex(t => t.dataset.tab === name);
+  const dir = (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) ? (toIdx > fromIdx ? 1 : -1) : 0;
+  lgMoveThumb();                              // 选中指示块原位滑到新 tab
+  lgPageIn($('#page-' + name), dir);           // 新页面从拖动方向滑入
   // 财报页内含「图表 / AI 分析」两个视图，进入时按当前视图渲染
   if (name === 'stats') setTimeout(() => setStatsView(statsView), 60);
   if (name === 'settings') { updateRecordCount(); renderBudgetSettingRow(); renderAiSettingsRows(); renderLockSettingRow(); }
@@ -4742,3 +4748,160 @@ document.addEventListener('visibilitychange', () => {
     if (bootReady) consumeWidgetAction();   // 组件带「记一笔」动作回到前台
   }
 });
+
+/* ---- 导航选中指示块：在原位滑动到当前 tab ---- */
+function lgMoveThumb() {
+  const capsule = $('.nav-capsule');
+  const thumb = $('.nav-thumb');
+  if (!capsule || !thumb) return;
+  const tab = capsule.querySelector('.tab.active');
+  if (thumb.dataset.drag === '1') return;   // 拖动中由手势自己接管位置
+  if (!tab || !tab.offsetWidth) return;
+  const first = !thumb.classList.contains('on');
+  if (first) thumb.style.transition = 'none';
+  thumb.style.left = tab.offsetLeft + 'px';
+  thumb.style.top = tab.offsetTop + 'px';
+  thumb.style.width = tab.offsetWidth + 'px';
+  thumb.style.height = tab.offsetHeight + 'px';
+  capsule.classList.add('thumb-on');
+  if (first) {
+    void thumb.offsetWidth;          // 首帧先落位，再开启滑动过渡
+    thumb.style.transition = '';
+    thumb.classList.add('on');
+  }
+}
+
+/* ---- 换页滑入：按切换方向从左右挪进来 ---- */
+function lgPageIn(page, dir) {
+  if (!page || !dir) return;
+  const cls = dir > 0 ? 'lg-in-right' : 'lg-in-left';
+  page.classList.remove('lg-in-right', 'lg-in-left');
+  void page.offsetWidth;             // 重启动画
+  page.classList.add(cls);
+  page.addEventListener('animationend', () => {
+    page.classList.remove('lg-in-right', 'lg-in-left');
+  }, { once: true });
+}
+
+/* ---- 左右拖动换页（纵向滚动与行内左滑删除互不干扰） ---- */
+(function lgBindSwipe() {
+  const area = $('.content');
+  const app = $('#app');
+  if (!area || !app) return;
+  let start = null;
+  let blockClick = false;
+  const curIdx = () => $$('.tab').findIndex(t => t.classList.contains('active'));
+
+  area.addEventListener('pointerdown', e => {
+    blockClick = false;
+    start = null;
+    if (!e.isPrimary) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (document.body.classList.contains('sheet-open')) return;   // 记账面板打开时不换页
+    if (app.classList.contains('detail-open')) return;           // 详情页不换页
+    const t = e.target;
+    if (t.closest && t.closest('.tx-row, .quick-row, .quick-chip, input, textarea, [contenteditable]')) return;
+    start = { x: e.clientX, y: e.clientY, time: Date.now() };
+  }, { passive: true });
+
+  area.addEventListener('pointercancel', () => { start = null; }, { passive: true });
+
+  area.addEventListener('pointerup', e => {
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const dur = Date.now() - start.time;
+    start = null;
+    if (dur > 800) return;
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    const list = $$('.tab');
+    const i = curIdx();
+    if (i < 0) return;
+    const next = dx < 0 ? i + 1 : i - 1;     // 手指向左滑 = 切到后一页
+    if (next < 0 || next >= list.length) return;
+    blockClick = true;                        // 吞掉手势结束后补发的那次 click
+    switchTab(list[next].dataset.tab);
+  }, { passive: true });
+
+  area.addEventListener('click', e => {
+    if (!blockClick) return;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+})();
+
+/* ---- 拖动导航按钮换页：指示块跟手，拖到哪个 tab 就切哪一页，左右来回都能切 ---- */
+(function lgBindNavDrag() {
+  const capsule = $('.nav-capsule');
+  const thumb = $('.nav-thumb');
+  if (!capsule || !thumb) return;
+  const tabs = () => $$('.nav-capsule .tab');
+  let down = null;
+  let blockClick = false;
+
+  /* 手指 x → 最近的 tab 序号，并把指示块贴到手指下方 */
+  function track(x) {
+    const list = tabs();
+    if (!list.length) return -1;
+    let near = 0;
+    let best = Infinity;
+    list.forEach((t, i) => {
+      const r = t.getBoundingClientRect();
+      const d = Math.abs(x - (r.left + r.width / 2));
+      if (d < best) { best = d; near = i; }
+    });
+    const r = list[near].getBoundingClientRect();
+    const box = capsule.getBoundingClientRect();
+    const left = Math.min(Math.max(x - box.left - r.width / 2, 6), box.width - r.width - 6);
+    thumb.style.left = left + 'px';
+    thumb.style.top = list[near].offsetTop + 'px';
+    thumb.style.width = r.width + 'px';
+    thumb.style.height = r.height + 'px';
+    return near;
+  }
+
+  capsule.addEventListener('pointerdown', e => {
+    blockClick = false;
+    down = null;
+    if (!e.isPrimary) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    down = { x: e.clientX, id: e.pointerId, moved: false };
+  });
+
+  window.addEventListener('pointermove', e => {
+    if (!down || e.pointerId !== down.id) return;
+    if (!down.moved) {
+      if (Math.abs(e.clientX - down.x) < 4) return;   // 4px 以内仍算点击
+      down.moved = true;
+      thumb.dataset.drag = '1';                       // 通知 lgMoveThumb 让位
+      thumb.style.transition = 'opacity .2s ease';
+    }
+    const list = tabs();
+    const t = list[track(e.clientX)];
+    if (t && !t.classList.contains('active')) switchTab(t.dataset.tab);
+  });
+
+  function endDrag() {
+    if (!down) return;
+    const moved = down.moved;
+    down = null;
+    if (!moved) return;                               // 纯点击，走原生 click
+    blockClick = true;                                // 吞掉拖动后补发的 click
+    delete thumb.dataset.drag;
+    thumb.style.transition = '';
+    lgMoveThumb();                                    // 松手吸附到当前 tab
+  }
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+
+  capsule.addEventListener('click', e => {
+    if (!blockClick) return;
+    blockClick = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+})();
+
+lgMoveThumb();
+window.addEventListener('resize', lgMoveThumb);
+setTimeout(lgMoveThumb, 300);                 // 字体/布局稳定后再对一次

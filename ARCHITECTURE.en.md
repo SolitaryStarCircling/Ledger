@@ -91,9 +91,9 @@ flowchart TB
 
 | File | Lines | Responsibility |
 |---|---:|---|
-| `src/index.html` | 805 | All page structure: home / record detail / stats / category detail / settings, plus the entry sheet, calendar, panels, lock overlay and batch-action bar |
-| `src/main.js` | 4744 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack; 18 section anchors navigable from the header comment |
-| `src/styles.css` | 2561 | All styling: theme variables, components, motion |
+| `src/index.html` | 807 | All page structure: home / record detail / stats / category detail / settings, plus the entry sheet, calendar, panels, lock overlay and batch-action bar |
+| `src/main.js` | 4907 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack; 18 section anchors navigable from the header comment |
+| `src/styles.css` | 2568 | All styling: theme variables, components, motion |
 | `src/vendor/xlsx.full.min.js` | 951,904 B (≈ 929.6 KB) | SheetJS 0.20.3, shipped in-repo (offline + CVE avoidance), lazily loaded only on the Excel import path |
 | `src/vendor/README.md` | — | Origin, hash and upgrade steps for the vendored file |
 
@@ -367,7 +367,7 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 | Input debounce | Quick-template chips reject repeat taps within 350 ms; a 500 ms long press enters multi-select (cancelled by a horizontal swipe or > 8 px jitter) | `main.js`, quick-template and list-gesture sections |
 | Touch ghost click | A row tap consumed on `pointerup` / `touchend` always cancels the synthesised click; the detail-page switch adds a 450 ms click-swallowing window so the same touch cannot hit a field row or bottom button at the new page's coordinates | `main.js#L609-L621`, `#L1983-L1991` |
 | Soft-keyboard adaptation | Native layer turns the IME bottom inset into root-container `padding-bottom` (`adjustResize` in `AndroidManifest.xml`), so once the WebView shrinks a `bottom:0` sheet naturally sits above the keyboard; JS also listens to `visualViewport` and `window resize` as a fallback lift, restoring on keyboard dismissal or panel close | `AndroidManifest.xml#L51`, `MainActivity.kt#L31-L41`, `main.js#L1993-L2026` |
-| Bottom navigation visibility | The record detail page is a second-level page: on entry `detail-open` is added to `#app` and CSS hides `.tabbar` / `.tab-settings` / `.fab`, leaving only the header back button; closing the detail page, switching tabs or opening the category detail page removes the class, so first-level pages (home / stats / settings) keep their navigation | `main.js#L1741`, `#L1784`, `#L2585`, `#L2623`, `styles.css#L1808-L1812` |
+| Bottom navigation visibility | The record detail page is a second-level page: on entry `detail-open` is added to `#app` and CSS hides `.tabbar` / `.fab`, leaving only the header back button; closing the detail page, switching tabs or opening the category detail page removes the class, so first-level pages (home / settings / stats) keep their navigation | `main.js#L1741`, `#L1784`, `#L2585`, `#L2623`, `styles.css#L1813-L1819` |
 | Home-screen widget | Three native `AppWidgetProvider`s (summary / budget ring / quick entry) + `RemoteViews`; the summary switches between 2x2/3x2 and 4x2, and `fitAmount` shrinks the font by string length so amounts are never truncated; data is read from `dataDir/ledger.sqlite` read-only with a `SharedPreferences` fallback; `WidgetCommon.refreshAll()` refreshes on `onStop` and the system's 30-minute period; quick entry hands "open the add panel" to the front end through a `widget_action` file + the `take_widget_action` command | `WidgetCommon.kt#L1-L253`, `LedgerWidgetProvider.kt#L1-L115`, `BudgetWidgetProvider.kt#L1-L73`, `QuickEntryWidgetProvider.kt#L1-L46`, `MainActivity.kt#L44-L68`, `lib.rs#L522-L535`, `main.js#L4681-L4722` |
 
 ---
@@ -478,7 +478,7 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 | Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L552-L553`); recovery relies on backups |
 | PIN brute-force resistance | No attempt limit and no delay |
 | Import scope | Excludes settings; backups missing newer tables are incompatible |
-| Front-end size | A single 4744-line `main.js` with no module split; readability relies on the 18-section navigation comment at the top plus matching anchors. Split triggers: file exceeds 6000 lines, a feature touches 3+ sections, or a function is called from 3+ sections with drifting semantics |
+| Front-end size | A single 4907-line `main.js` with no module split; readability relies on the 18-section navigation comment at the top plus matching anchors. Split triggers: file exceeds 6000 lines, a feature touches 3+ sections, or a function is called from 3+ sections with drifting semantics |
 | Query scale | Full load plus front-end filtering; no pagination or virtual list, and very large ledgers (10k+ rows) have not been performance-verified |
 
 **Divergence from the early course documents**: several descriptions in the project's early document set (`ledger document/`, never under version control) no longer match reality and are not carried over here. Three typical cases: (1) its UI spec describes iOS system colours (`#F2F2F7` / `#007AFF` / 24 px corners) while the current theme is a warm neutral paper feel with dark indigo accents, measured in §13; (2) its database document describes a single table while there are five (§4); (3) its test plan claims "editing the date to 400 days ago is always rejected" (now the opposite: re-saving an **unchanged** date is allowed) and "a corrupted data file falls back to an empty ledger", which is not implemented in code.
@@ -490,9 +490,9 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 ```
 ledger/
 ├── src/                          Front end (plain HTML/CSS/JS, no build)
-│   ├── index.html                805 lines · all page structure
-│   ├── styles.css                2561 lines · theme variables and all styling
-│   ├── main.js                   4744 lines · all logic (ES module)
+│   ├── index.html                807 lines · all page structure
+│   ├── styles.css                2568 lines · theme variables and all styling
+│   ├── main.js                   4907 lines · all logic (ES module)
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3, shipped in-repo (951,904 B)
 │       └── README.md             origin / SHA-256 / upgrade steps

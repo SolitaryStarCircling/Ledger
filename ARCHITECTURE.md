@@ -91,9 +91,9 @@ flowchart TB
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `src/index.html` | 805 | 全部页面结构：明细页 / 记录详情页 / 财报页 / 分类明细页 / 设置页，以及记账面板、日历、弹层、锁屏层、批量操作栏 |
-| `src/main.js` | 4744 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题、返回栈；顶部 18 个分区导航注释 |
-| `src/styles.css` | 2561 | 全部样式：主题变量、组件、动效 |
+| `src/index.html` | 807 | 全部页面结构：明细页 / 记录详情页 / 财报页 / 分类明细页 / 设置页，以及记账面板、日历、弹层、锁屏层、批量操作栏 |
+| `src/main.js` | 4907 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题、返回栈；顶部 18 个分区导航注释 |
+| `src/styles.css` | 2568 | 全部样式：主题变量、组件、动效 |
 | `src/vendor/xlsx.full.min.js` | 951,904 B（约 929.6 KB） | SheetJS 0.20.3，随包分发（离线 + 规避 CVE），仅 Excel 导入路径按需加载 |
 | `src/vendor/README.md` | — | 该 vendor 文件的来源、哈希、升级步骤 |
 
@@ -367,7 +367,7 @@ CREATE TABLE IF NOT EXISTS settings (
 | 交互防抖 | 常用项胶囊 350ms 内防连点；长按 500ms 进入多选（横滑/抖动 >8px 取消） | `main.js` 常用项与列表手势段 |
 | 触摸幽灵 click | 行的点按在 `pointerup` / `touchend` 上消费后一律取消合成 click；详情页切换另设 450ms 点击吞掉窗口，避免同一次触摸在新页面同坐标误触字段行 / 底部按钮 | `main.js#L609-L621`、`#L1983-L1991` |
 | 软键盘适配 | 原生层把 IME 底部 inset 转为根容器 `padding-bottom`（`AndroidManifest.xml` 设 `adjustResize`），WebView 变矮后 `bottom:0` 弹层自然落在键盘上方；JS 同时监听 `visualViewport` 与 `window resize` 兜底抬高，键盘收起 / 关闭面板即还原 | `AndroidManifest.xml#L51`、`MainActivity.kt#L31-L41`、`main.js#L1993-L2026` |
-| 底部导航显隐 | 记录详情页是二级页面：进入时给 `#app` 加 `detail-open`，CSS 隐藏 `.tabbar` / `.tab-settings` / `.fab`，只保留顶栏返回键；关闭详情、切 tab、打开分类明细页时移除，一级页面（明细 / 财报 / 设置）保持原有导航 | `main.js#L1741`、`#L1784`、`#L2585`、`#L2623`、`styles.css#L1808-L1812` |
+| 底部导航显隐 | 记录详情页是二级页面：进入时给 `#app` 加 `detail-open`，CSS 隐藏 `.tabbar` / `.fab`，只保留顶栏返回键；关闭详情、切 tab、打开分类明细页时移除，一级页面（明细 / 设置 / 财报）保持原有导航 | `main.js#L1741`、`#L1784`、`#L2585`、`#L2623`、`styles.css#L1813-L1819` |
 | 桌面组件 | 三个原生 `AppWidgetProvider`（汇总 / 预算环 / 快捷记账）+ `RemoteViews`；汇总在 2x2/3x2 与 4x2 间切布局，金额按字符数分档缩字号避免截断；数据只读 `dataDir/ledger.sqlite`，失败回退 `SharedPreferences`；`WidgetCommon.refreshAll()` 在应用 `onStop` 与系统 30 分钟周期刷新；快捷记账通过 `widget_action` 文件 + `take_widget_action` 命令把「打开记账面板」传给前端 | `WidgetCommon.kt#L1-L253`、`LedgerWidgetProvider.kt#L1-L115`、`BudgetWidgetProvider.kt#L1-L73`、`QuickEntryWidgetProvider.kt#L1-L46`、`MainActivity.kt#L44-L68`、`lib.rs#L522-L535`、`main.js#L4681-L4722` |
 
 ---
@@ -478,7 +478,7 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | 损坏数据库 | 打开失败直接返回错误，**不自动回退空库**（`lib.rs#L552-L553`）；用户需靠备份恢复 |
 | PIN 爆破防护 | 无尝试次数限制与延时 |
 | 导入范围 | 不含设置项；缺列的新旧备份不兼容 |
-| 前端规模 | 单文件 `main.js` 4744 行，无模块拆分；靠顶部 18 个分区的导航注释 + 同名锚点维持可读性。拆分触发条件：单文件超 6000 行、新功能需跨 3 个以上分区、同一函数被 3 个以上分区调用且语义漂移 |
+| 前端规模 | 单文件 `main.js` 4907 行，无模块拆分；靠顶部 18 个分区的导航注释 + 同名锚点维持可读性。拆分触发条件：单文件超 6000 行、新功能需跨 3 个以上分区、同一函数被 3 个以上分区调用且语义漂移 |
 | 查询规模 | 全量加载 + 前端过滤；未做分页/虚拟列表，超大账本（万条以上）未做性能验证 |
 
 **与早期课程文档的差异说明**：项目早期文档集（`ledger document/`，从未纳入版本控制）中的若干描述已与现状不符，本文不沿用。典型三处：① 其 UI 规范写的是 iOS 系统色（`#F2F2F7` / `#007AFF` / 24px 圆角），现行主题是暖中性纸感 + 暗靛，实测值见 §13；② 其数据库文档只描述 1 张表，实际为 5 张（§4）；③ 其测试计划中的「改日期为 400 天前一律拒绝」与现状相反（现状允许**未修改日期**的原样保存）、「数据文件损坏回退空账」在代码中并未实现。
@@ -490,9 +490,9 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 ```
 ledger/
 ├── src/                          前端（原生 HTML/CSS/JS，无构建）
-│   ├── index.html                805 行 · 全部页面结构
-│   ├── styles.css                2561 行 · 主题变量与全部样式
-│   ├── main.js                   4744 行 · 全部逻辑（ES Module）
+│   ├── index.html                807 行 · 全部页面结构
+│   ├── styles.css                2568 行 · 主题变量与全部样式
+│   ├── main.js                   4907 行 · 全部逻辑（ES Module）
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3，随包分发（951,904 B）
 │       └── README.md             来源 / SHA-256 / 升级步骤

@@ -205,6 +205,17 @@ body.sheet-open .tabbar { opacity: .45; }
   will-change: transform, opacity;
 }
 .page.active { opacity: 1; transform: none; pointer-events: auto; }
+/* 换页时从拖动方向滑入：原地挪动，不做生硬的瞬间切换 */
+@keyframes lgPageInRight {
+  from { opacity: 0; transform: translateX(28px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes lgPageInLeft {
+  from { opacity: 0; transform: translateX(-28px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.page.lg-in-right { animation: lgPageInRight .38s cubic-bezier(.22,1,.36,1); }
+.page.lg-in-left  { animation: lgPageInLeft  .38s cubic-bezier(.22,1,.36,1); }
 body.sheet-open .page,
 body.modal-open .page { overflow: hidden; }
 
@@ -978,8 +989,7 @@ html, body {
 }
 
 /* ============ Tab Bar 悬浮胶囊 ============ */
-/* 整条栏只负责排布这一行：宽屏时只放居中的胶囊（设置单独悬浮在右侧），
-   窄屏时把设置并进同一行，两个控件永远不会互相挤压 */
+/* 胶囊与记一笔始终是同一行里的两个 flex 项：整体居中，任何窗口宽度都不会互相压住 */
 .tabbar {
   position: fixed;
   left: 0;
@@ -995,10 +1005,11 @@ html, body {
   transition: opacity .3s ease;
 }
 .nav-capsule,
-.tab-settings { pointer-events: auto; }
-/* 居中胶囊：只包裹 明细 / 记一笔 / 财报 三个键；高度固定 56px，
-   只容纳左右两个 tab，中间的圆形主钮靠负边距凸出胶囊之外 */
+.fab { pointer-events: auto; }
+/* 居中胶囊：包裹 明细 / 设置 / 财报 三个 tab；高度固定 56px
+   纯透明磨砂：几乎不染底色，只靠实时背景模糊出霜面 + 发丝描边勾边 */
 .nav-capsule {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1006,11 +1017,17 @@ html, body {
   padding: 0 6px;
   width: fit-content;
   border-radius: 999px;
-  /* 跟随主题：浅色白卡 / 深色深灰卡，配浮起投影 */
-  background: var(--card);
-  box-shadow: var(--sh-3), 0 4px 10px -4px rgba(28,26,23,0.18), inset 0 0 0 0.5px var(--hairline);
+  background: color-mix(in srgb, var(--card) 12%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(185%);
+  backdrop-filter: blur(16px) saturate(185%);
+  overflow: hidden;                 /* 裁切滑动指示块 */
+  touch-action: none;               /* 手指/鼠标在胶囊上的横向拖动不触发页面滚动 */
+  user-select: none;
+  box-shadow: var(--sh-3), 0 4px 10px -4px rgba(28,26,23,0.16), inset 0 0 0 0.5px var(--hairline);
 }
 .tab {
+  position: relative;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1025,32 +1042,33 @@ html, body {
   transition: color .22s ease, background .22s ease;
 }
 .tab svg { width: 22px; height: 22px; transition: transform .32s cubic-bezier(.34,1.56,.64,1); }
-.tab.active { color: var(--blue); background: var(--blue-soft); }
+/* 选中项：文字/图标变蓝，底块交给滑动指示块 */
+.tab.active {
+  color: var(--blue);
+  background: var(--fill);
+}
+.nav-capsule.thumb-on .tab.active {
+  background: transparent;
+}
+
+/* 选中指示块：在胶囊内原位滑动（left/width 由 main.js 写入） */
+.nav-thumb {
+  position: absolute;
+  z-index: 2;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  background: var(--fill-strong);
+  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  transition: left .36s cubic-bezier(.34,1.56,.64,1),
+              width .36s cubic-bezier(.34,1.56,.64,1),
+              opacity .2s ease;
+}
+.nav-thumb.on { opacity: 1; }
 .tab.active svg { transform: scale(1.06); animation: tabPop .42s cubic-bezier(.34,1.56,.64,1); }
 .tab:active svg { transform: scale(0.9); }
 
-/* 设置：独立悬浮键，颜色与圆角对齐右侧胶囊的三个键 */
-.tab-settings {
-  position: fixed;
-  right: 24px;                       /* 距右边界留白，不贴 app 边缘 */
-  bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 20px);
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  min-width: 58px;
-  padding: 9px 16px;
-  border-radius: 999px;
-  background: var(--card);
-  box-shadow: var(--sh-3), 0 4px 10px -4px rgba(28,26,23,0.18), inset 0 0 0 0.5px var(--hairline);
-  color: var(--text3);
-  transition: color .22s ease, background .22s ease, opacity .3s ease;
-}
-.tab-settings span { display: block; font-size: 10px; font-weight: 500; letter-spacing: 0.1px; white-space: nowrap; }
-.tab-settings svg { width: 22px; height: 22px; }
-.tab-settings.active { color: var(--blue); background: var(--blue-soft); }
+/* 设置已并入导航胶囊，作为普通 tab 显示 */
 @keyframes tabPop {
   0% { transform: scale(1); }
   38% { transform: scale(1.18); }
@@ -1058,37 +1076,28 @@ html, body {
   100% { transform: scale(1.06); }
 }
 
-/* ============ 记一笔：居中的圆形主钮（明细/财报分列左右） ============ */
-/* 负垂直外边距抵消圆钮高度，让胶囊仍由 tab 决定高度，圆钮上下各凸出 8px */
+/* ============ 记一笔：脱离导航条的独立圆形主钮（占原「设置」位置） ============ */
 .fab {
+  position: relative;                /* 作为 .tabbar 的 flex 项跟随胶囊，不再相对视口固定 */
   flex: none;
-  position: relative;
-  z-index: 1;
-  margin: -8px 10px;
-  width: 72px; height: 72px;
+  width: 56px; height: 56px;
+  margin: 0;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   background: #5B68A6;   /* 雾靛，略调亮去灰感，低饱和 */
   color: #FFFFFF;
   box-shadow: var(--sh-blue), 0 2px 6px -2px rgba(0,0,0,0.20);
+  pointer-events: auto;
   transition: transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .28s, opacity .3s ease;
 }
 .fab:active { transform: scale(0.9); box-shadow: 0 4px 12px -6px rgba(0,0,0,0.40); }
-.fab svg { width: 30px; height: 30px; }
+.fab svg { width: 24px; height: 24px; }
 
-/* 窄屏手机（<400px）：胶囊 → 设置 并排成一组整体居中，
-   靠负边距凸出的圆钮在 320px 屏上依然留白充足；
-   宽屏保持「胶囊居中 + 设置悬浮右侧」的原始构图 */
+/* 窄屏手机（<400px）：收紧间距，胶囊与记一笔仍是同一行的一组 */
 @media (max-width: 399px) {
-  .tabbar { gap: 10px; padding: 0 12px; }
+  .tabbar { gap: 8px; padding: 0 12px; }
   .nav-capsule { padding: 0 5px; }
   .nav-capsule .tab { padding: 6px 12px; }
-  .nav-capsule .fab { margin: -8px 8px; }
-  .tab-settings {
-    position: static;               /* 从悬浮键改为同行排布，宽度由内容决定 */
-    min-width: 54px;
-    padding: 9px 14px;
-  }
 }
 
 /* ============ 记账面板 ============ */
@@ -1802,14 +1811,12 @@ html, body {
 .app.select-mode .tx-content { cursor: default; }
 .app.select-mode .tx-row + .tx-row .tx-content::before { left: 96px; }
 .app.select-mode .fab,
-.app.select-mode .tabbar,
-.app.select-mode .tab-settings { display: none; }
+.app.select-mode .tabbar { display: none; }
 
 /* 记录详情页是二级页面：底部悬浮导航不跟随，只留顶栏返回键；
    一级页面（明细 / 财报 / 设置）仍保留导航。 */
 .app.detail-open .fab,
-.app.detail-open .tabbar,
-.app.detail-open .tab-settings { display: none; }
+.app.detail-open .tabbar { display: none; }
 
 .tx-row.is-selected .tx-content { background: rgba(0,122,255,0.10); }
 @media (prefers-color-scheme: dark) {
