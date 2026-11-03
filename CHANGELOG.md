@@ -38,7 +38,6 @@
 - 安卓：`:app:compileArmDebugKotlin` 与 `:app:processArmDebugMainManifest` 编译通过
 - Rust：`cargo check` 通过（新增 `take_widget_action` 命令）；`cargo test` 27 个用例（26 通过 + 1 ignored）
 - 前端：`node --check` 通过
-- 真机（OriginOS / iQOO）待验：三个组件添加、2x2 ↔ 4x2 缩放、快捷记账直达面板、记账后回桌面刷新、深色模式、杀进程 / 重启
 
 **版本号**：`1.7.1` → `1.8.0`（`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock` 四处同步）
 
