@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 桌面组件深色配色：对应 styles.css 的暗色变量 -->
+    <color name="widget_bg">#FF1E1C1B</color>
+    <color name="widget_bg2">#FF242220</color>
+    <color name="widget_stroke">#FF34312E</color>
+    <color name="widget_sep">#FF34312E</color>
+    <color name="widget_text">#FFEDEAE6</color>
+    <color name="widget_text2">#FFA9A49D</color>
+    <color name="widget_accent">#FF8E96C9</color>
+    <color name="widget_on_accent">#FF171615</color>
+    <color name="widget_expense">#FFCF8C86</color>
+    <color name="widget_income">#FF8CAE92</color>
+    <color name="widget_progress_track">#FF262422</color>
+</resources>

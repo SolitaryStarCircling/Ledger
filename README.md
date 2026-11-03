@@ -53,6 +53,13 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 - 月度预算设置，超支时给出醒目提醒（打开应用若本月已超支会提示，记账刚好跨过预算线时也会提示）
 - 账单导入支持自定义关键词自动归类规则（规则优先于内置关键词）
 
+**桌面组件（Android / OriginOS）**
+
+- 三个独立组件：**汇总卡**（2x2 / 3x2 / 4x2，今日支出、本月支出、预算剩余与进度）、**预算环**（2x2，环形进度 + 剩余 + 日均可用）、**快捷记账**（2x1，点击直接打开「记一笔」面板）
+- 汇总卡右上角固定为「本月支出」、底部固定为「预算剩余」；金额按长度自动缩字号，大额不被截断
+- 组件数据直接读取本机账本，记账 / 改账 / 删除后回到桌面立即刷新，另有 30 分钟系统周期兜底
+- 浅色 / 深色随系统切换
+
 **账户安全**
 
 - 应用锁：4-8 位数字密码，离开应用或切后台自动锁定，防止他人误看账目
@@ -76,9 +83,9 @@ Ledger 是一款<strong>离线优先（offline-first）</strong>的个人记账�
 | 层 | 技术 | 版本 | 说明 |
 |---|---|---|---|
 | 跨端框架 | Tauri | 2.11 | 支持 Android 与 Windows 桌面端 |
-| 后端 | Rust (edition 2021) | — | 8 个模块，注册 **37 个 `#[tauri::command]`** |
+| 后端 | Rust (edition 2021) | — | 8 个模块，注册 **38 个 `#[tauri::command]`** |
 | 数据库 | SQLite via rusqlite（bundled） | 0.32 | 静态编入，无外部依赖 |
-| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4724 行、`styles.css` 2561 行、`index.html` 805 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
+| 前端 | 原生 HTML / CSS / ES Module | — | **无前端框架、无打包器、无构建步骤**：`main.js` 4744 行、`styles.css` 2561 行、`index.html` 805 行；运行时依赖只有 3 个（`@tauri-apps/api` / `plugin-dialog` / `plugin-fs`），无打包器；Excel 解析库以静态文件随包分发于 `src/vendor/` |
 | HTTP | reqwest + rustls(ring)，纯 Rust TLS | 0.13 / 0.23 | `default-features = false`，刻意避开 OpenSSL |
 | 日期 | chrono | 0.4 | |
 | 密码哈希 | argon2（Argon2id，纯 Rust） | 0.5 | 应用锁 PIN 哈希，无 C 依赖 |
@@ -107,7 +114,7 @@ TLS 特意选用 **rustls + ring**（纯 Rust 实现），因此 Android 与 Win
 
 **金额全程不出现浮点**：后端以整数「分」落库，对外用 `"12.34"` 字符串传输，解析时逐位校验（单一小数点、整数位 ≤ 9、小数位 ≤ 2、必须 > 0）。
 
-> 完整的模块依赖图、37 个命令契约、并发模型、DDL 全文与设计取舍见 [ARCHITECTURE.md §2–§8](./ARCHITECTURE.md#2-模块结构)。
+> 完整的模块依赖图、38 个命令契约、并发模型、DDL 全文与设计取舍见 [ARCHITECTURE.md §2–§8](./ARCHITECTURE.md#2-模块结构)。
 
 ---
 
@@ -206,7 +213,7 @@ ledger/
 ├── src-tauri/                  Rust 后端
 │   ├── src/
 │   │   ├── main.rs             入口
-│   │   ├── lib.rs              Tauri 命令注册（37 个 invoke 命令）
+│   │   ├── lib.rs              Tauri 命令注册（38 个 invoke 命令）
 │   │   ├── models.rs           数据结构
 │   │   ├── db.rs               SQLite 连接与建表
 │   │   ├── service.rs          业务逻辑：金额 / 日期 / 分类校验、增删改查
@@ -219,7 +226,7 @@ ledger/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── docs/                       截图（明细页 / 记账面板 / 财报页）
-├── ARCHITECTURE.md             架构文档（中文）：37 个命令契约 / 数据模型 / 设计取舍
+├── ARCHITECTURE.md             架构文档（中文）：38 个命令契约 / 数据模型 / 设计取舍
 ├── ARCHITECTURE.en.md          架构文档（英文）
 ├── package.json
 ├── LICENSE                     MIT

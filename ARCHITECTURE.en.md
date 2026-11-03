@@ -59,7 +59,7 @@ flowchart TB
 |---|---|---|
 | Presentation | `src/index.html` + `src/styles.css` + `src/main.js` | All UI and interaction, statistics computation, export formatting; holds no persistence logic |
 | Transport | Tauri IPC | Front end `invoke(command, args)` → Rust `#[tauri::command]`; single window, no custom protocol |
-| Business | the 37 commands registered in `lib.rs` plus `service.rs` / `keys.rs` / `lock.rs` / `ai.rs` | Argument validation, amount conversion, transactions, credential management, AI calls |
+| Business | the 38 commands registered in `lib.rs` plus `service.rs` / `keys.rs` / `lock.rs` / `ai.rs` | Argument validation, amount conversion, transactions, credential management, AI calls |
 | Storage | `db.rs` + `rusqlite` | Schema creation, seed data, single-file SQLite access |
 | External | `reqwest` inside `ai.rs` | Only appears when the user clicks "Generate analysis"; strictly one-directional (app → provider) |
 
@@ -92,7 +92,7 @@ flowchart TB
 | File | Lines | Responsibility |
 |---|---:|---|
 | `src/index.html` | 805 | All page structure: home / record detail / stats / category detail / settings, plus the entry sheet, calendar, panels, lock overlay and batch-action bar |
-| `src/main.js` | 4724 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack; 18 section anchors navigable from the header comment |
+| `src/main.js` | 4744 | All logic (one ES module): state, rendering, statistics, import/export, AI panel, lock screen, theme, back stack; 18 section anchors navigable from the header comment |
 | `src/styles.css` | 2561 | All styling: theme variables, components, motion |
 | `src/vendor/xlsx.full.min.js` | 951,904 B (≈ 929.6 KB) | SheetJS 0.20.3, shipped in-repo (offline + CVE avoidance), lazily loaded only on the Excel import path |
 | `src/vendor/README.md` | — | Origin, hash and upgrade steps for the vendored file |
@@ -118,7 +118,7 @@ Sections inside `main.js` (following the section comments in the file):
 | Module | Lines | Responsibility | Depends on |
 |---|---:|---|---|
 | `main.rs` | 6 | Process entry point, calls `ledger_lib::run()` | `lib` |
-| `lib.rs` | 587 | Wiring layer: manages state, registers 37 commands, implements export/import, startup migration | all business modules |
+| `lib.rs` | 603 | Wiring layer: manages state, registers 38 commands, implements export/import, startup migration | all business modules |
 | `db.rs` | 105 | Opens the connection, idempotent schema creation, seed categories, first-run default templates | `models` (implicitly), `rusqlite` |
 | `models.rs` | 38 | Three data structures: `Transaction` / `Template` / `Category` | `serde` |
 | `service.rs` | 1038 | Amount and date parsing/validation, id generation, CRUD, whole-record update, category validation and delete protection, budget, settings access | `models`, `chrono`, `rusqlite` |
@@ -141,11 +141,11 @@ Rule: business functions always take a `&Connection` supplied by the caller insi
 
 ---
 
-## 3. Command contracts (37)
+## 3. Command contracts (38)
 
-Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L546-L584`). The 37 rows below close exactly against it — nothing extra, nothing missing. Every failure path returns `Result<_, String>`, where the `String` is a user-displayable Chinese message.
+Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L561-L600`). The 38 rows below close exactly against it — nothing extra, nothing missing. Every failure path returns `Result<_, String>`, where the `String` is a user-displayable Chinese message.
 
-**Groups (7, 37 total)**: transactions 9 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2.
+**Groups (8, 38 total)**: transactions 9 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2 · platform 1.
 
 ### 3.1 transactions (9)
 
@@ -219,7 +219,13 @@ Source: the `invoke_handler` list in `lib.rs` (`lib.rs#L546-L584`). The 37 rows 
 | `read_db_bytes` | — | `Vec<u8>` | For export; copies to a temp DB first and strips `ai_api_key` / `deepseek_api_key` / `ai_key_hint`; falls back to raw bytes if any step fails |
 | `import_db_data` | `data: Vec<u8>` | `usize` | Restores a SQLite backup with an atomic overwrite (see §6); returns the imported transaction count |
 
-> Front-end call sites (examples): `add_tx` ← `saveTx()` (`main.js`), `update_tx` ← record detail "Edit" / type switch / single-record re-categorisation, `update_amount` / `update_date` / `update_note` ← tapping a field on the record detail page, `update_category_batch` ← batch re-categorisation, `read_db_bytes` ← `exportBackup()`, `import_db_data` ← `importBackup()`, `ai_analyze` ← generate analysis. All 37 commands have a front-end call site.
+### 3.8 platform (1)
+
+| Command | Arguments | Returns | Notes |
+|---|---|---|---|
+| `take_widget_action` | — | `Option<String>` | Widget "quick entry" only: reads and deletes `dataDir/widget_action`, returning `"add"`; `null` when no action is pending |
+
+> Front-end call sites (examples): `add_tx` ← `saveTx()` (`main.js`), `update_tx` ← record detail "Edit" / type switch / single-record re-categorisation, `update_amount` / `update_date` / `update_note` ← tapping a field on the record detail page, `update_category_batch` ← batch re-categorisation, `read_db_bytes` ← `exportBackup()`, `import_db_data` ← `importBackup()`, `ai_analyze` ← generate analysis, `take_widget_action` ← quick-entry widget returning to the foreground. All 38 commands have a front-end call site.
 
 ---
 
@@ -331,7 +337,7 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 
 | Mechanism | Implementation | Source |
 |---|---|---|
-| Connection ownership | A single `Mutex<Connection>` managed via `app.manage(Mutex::new(conn))`; commands obtain it through `tauri::State` | `lib.rs#L512-L529` (the `setup` block of `run()`); `app.manage` at `#L526-L527` |
+| Connection ownership | A single `Mutex<Connection>` managed via `app.manage(Mutex::new(conn))`; commands obtain it through `tauri::State` | `lib.rs#L543-L560` (the `setup` block of `run()`); `app.manage` at `#L557-L558` |
 | Lock scope | Synchronous commands release the lock as soon as they finish; **async commands must narrow the lock first and never hold it across `await`** (`ai_analyze` / `ai_test_key` use an inner block to copy out the key and config before awaiting) | `lib.rs#L291-L339` |
 | Amount parsing | Digit-by-digit validation: non-empty, no leading `.`, at most one decimal point, ≤ 9 integer digits, ≤ 2 decimal digits, result > 0 | `service.rs#L10-L40` |
 | id generation | Millisecond timestamp + in-process counter `ID_SEQ` (starting at 1) + odd-multiplier bijective mix of the low 32 bits. With only the millisecond, two writes in the same millisecond would collide on `PRIMARY KEY`; starting at 1 avoids colliding with "old-version pure-millisecond" ids | `service.rs#L69-L81` (`ID_SEQ` at `#L69`) |
@@ -353,15 +359,16 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 | Save re-entry guard | The `savingTx` flag with `if (savingTx) return`, preventing a double-tap or double-Enter from recording two transactions | `main.js#L2954`, `#L2957` |
 | View month | `viewMonth` (`YYYY-MM`); switching months must call `loadBudget()` again, otherwise the previous month's budget lingers | `main.js#L275`, `#L2207-L2212` |
 | Lock overlay | Defaults to `display:none`, shown only when JS removes the `hidden` attribute; going to the background (`visibilitychange` + `document.hidden` while the lock is enabled) re-locks | `index.html#lockOverlay`, `main.js#L4520-L4529`, `#L4667-L4668` |
-| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4711-L4717` |
+| Minute-level redraw | The timer calls `renderHome()` only when the page is visible **and** the day has changed; an unconditional redraw would replay the list's entry animation every minute and collapse a swipe-opened row | `main.js#L4730-L4736` |
 | Date picker guard | New entries page within the current month ±2; edits and detail-page date changes page within ±1 year (`calRange()` supplies `min`/`max` and the arrows are disabled at the edges); out-of-range days render as non-clickable `.cal-day.off` | `main.js#L2825-L2838` (guard at `#L2865-L2870`) |
 | Month view range | The home page allows switching within "12 months back to 3 months forward" (`monthShiftAllowed`) | `main.js#L2199-L2205` |
 | Theme | Three states: follow the system (`prefers-color-scheme`), explicit `data-theme="dark"`, explicit `data-theme="light"` | `styles.css#L59-L127`, `main.js#L4453-L4478` |
 | Report date picker | After picking "Day" in the "Balance range" sheet, the date list shows **only dates that actually have records** (aggregated from `txs`, deduplicated, newest first) instead of a fixed "last 12 days / next 3 days" window; each row shows that day's expense/income, and an empty state appears when there are no records | `main.js#L2148-L2180` |
 | Input debounce | Quick-template chips reject repeat taps within 350 ms; a 500 ms long press enters multi-select (cancelled by a horizontal swipe or > 8 px jitter) | `main.js`, quick-template and list-gesture sections |
 | Touch ghost click | A row tap consumed on `pointerup` / `touchend` always cancels the synthesised click; the detail-page switch adds a 450 ms click-swallowing window so the same touch cannot hit a field row or bottom button at the new page's coordinates | `main.js#L609-L621`, `#L1983-L1991` |
-| Soft-keyboard adaptation | Native layer turns the IME bottom inset into root-container `padding-bottom` (`adjustResize` in `AndroidManifest.xml`), so once the WebView shrinks a `bottom:0` sheet naturally sits above the keyboard; JS also listens to `visualViewport` and `window resize` as a fallback lift, restoring on keyboard dismissal or panel close | `AndroidManifest.xml#L18`, `MainActivity.kt#L28-L38`, `main.js#L1993-L2026` |
+| Soft-keyboard adaptation | Native layer turns the IME bottom inset into root-container `padding-bottom` (`adjustResize` in `AndroidManifest.xml`), so once the WebView shrinks a `bottom:0` sheet naturally sits above the keyboard; JS also listens to `visualViewport` and `window resize` as a fallback lift, restoring on keyboard dismissal or panel close | `AndroidManifest.xml#L51`, `MainActivity.kt#L31-L41`, `main.js#L1993-L2026` |
 | Bottom navigation visibility | The record detail page is a second-level page: on entry `detail-open` is added to `#app` and CSS hides `.tabbar` / `.tab-settings` / `.fab`, leaving only the header back button; closing the detail page, switching tabs or opening the category detail page removes the class, so first-level pages (home / stats / settings) keep their navigation | `main.js#L1741`, `#L1784`, `#L2585`, `#L2623`, `styles.css#L1808-L1812` |
+| Home-screen widget | Three native `AppWidgetProvider`s (summary / budget ring / quick entry) + `RemoteViews`; the summary switches between 2x2/3x2 and 4x2, and `fitAmount` shrinks the font by string length so amounts are never truncated; data is read from `dataDir/ledger.sqlite` read-only with a `SharedPreferences` fallback; `WidgetCommon.refreshAll()` refreshes on `onStop` and the system's 30-minute period; quick entry hands "open the add panel" to the front end through a `widget_action` file + the `take_widget_action` command | `WidgetCommon.kt#L1-L253`, `LedgerWidgetProvider.kt#L1-L115`, `BudgetWidgetProvider.kt#L1-L73`, `QuickEntryWidgetProvider.kt#L1-L46`, `MainActivity.kt#L44-L68`, `lib.rs#L522-L535`, `main.js#L4681-L4722` |
 
 ---
 
@@ -373,7 +380,7 @@ Two compatibility measures have actually shipped: (1) migration of the legacy `s
 | App lock | A 4–8 digit numeric PIN hashed with Argon2id and a random salt into `settings` (`lock_enabled` / `lock_pin_hash`) | **It does not encrypt the on-disk database.** It prevents someone else from casually reading your ledger on this device; disk encryption is a separate capability and is **deliberately not implemented** (stated in the `lock.rs` header comment) |
 | PIN verification | Compared locally; never sent anywhere, never stored in plaintext; always passes when no hash exists | No attempt counter and no lockout delay (not implemented) |
 | API key storage | Three tiers: (1) OS keychain (Windows / macOS only, conditional compilation of `keyring`), (2) local database (`ai_api_key`), (3) memory only (in-process `Mutex<Option<String>>`, gone on exit). Android falls back when the keychain is unavailable | `keys.rs#L10-L77`; the UI only echoes the first 3 and last 4 characters (for ≤ 8 characters it echoes `••••`) |
-| Key migration | The legacy `deepseek_api_key` is migrated to `ai_api_key` on startup | `keys::migrate_legacy` (`keys.rs#L277`), called at `lib.rs#L525` |
+| Key migration | The legacy `deepseek_api_key` is migrated to `ai_api_key` on startup | `keys::migrate_legacy` (`keys.rs#L277`), called at `lib.rs#L556` |
 | Backup carries no credentials | Export copies the DB to a temp file and runs `DELETE FROM settings WHERE key IN ('ai_api_key','deepseek_api_key','ai_key_hint')` before reading bytes; **any failure falls back to the raw bytes** | `lib.rs#L341-L371` (strip statement at `#L353`) |
 | Import scope | Covers only `transactions` / `budgets` / `templates`; `categories` are **merged** by id (never emptied wholesale); **no settings are imported** (lock PIN, API key, privacy consent, auto-categorisation rules) | `lib.rs#L372-L505`; the import confirmation copy must state this |
 | Import atomicity | Write a temp file → `ATTACH DATABASE` (`#L391`) → verify `sqlite_master` really contains `transactions` (`#L399`) → `DELETE` + `INSERT` inside a transaction (`#L469`, `#L480`, `#L491`) → `COMMIT` → `DETACH` and delete the temp file; any failure cleans up the temp file and `DETACH`es | `lib.rs#L372-L505` |
@@ -468,10 +475,10 @@ Monthly analyses are cached in the `settings` key `ai_analysis_<YYYY-MM>` (writt
 | Item | Current state |
 |---|---|
 | Schema changes | No migration framework; only whole-table additions (§4.5) |
-| Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L521-L522`); recovery relies on backups |
+| Corrupted database | Opening failure returns an error directly and **does not fall back to an empty ledger** (`lib.rs#L552-L553`); recovery relies on backups |
 | PIN brute-force resistance | No attempt limit and no delay |
 | Import scope | Excludes settings; backups missing newer tables are incompatible |
-| Front-end size | A single 4724-line `main.js` with no module split; readability relies on the 18-section navigation comment at the top plus matching anchors. Split triggers: file exceeds 6000 lines, a feature touches 3+ sections, or a function is called from 3+ sections with drifting semantics |
+| Front-end size | A single 4744-line `main.js` with no module split; readability relies on the 18-section navigation comment at the top plus matching anchors. Split triggers: file exceeds 6000 lines, a feature touches 3+ sections, or a function is called from 3+ sections with drifting semantics |
 | Query scale | Full load plus front-end filtering; no pagination or virtual list, and very large ledgers (10k+ rows) have not been performance-verified |
 
 **Divergence from the early course documents**: several descriptions in the project's early document set (`ledger document/`, never under version control) no longer match reality and are not carried over here. Three typical cases: (1) its UI spec describes iOS system colours (`#F2F2F7` / `#007AFF` / 24 px corners) while the current theme is a warm neutral paper feel with dark indigo accents, measured in §13; (2) its database document describes a single table while there are five (§4); (3) its test plan claims "editing the date to 400 days ago is always rejected" (now the opposite: re-saving an **unchanged** date is allowed) and "a corrupted data file falls back to an empty ledger", which is not implemented in code.
@@ -485,14 +492,14 @@ ledger/
 ├── src/                          Front end (plain HTML/CSS/JS, no build)
 │   ├── index.html                805 lines · all page structure
 │   ├── styles.css                2561 lines · theme variables and all styling
-│   ├── main.js                   4724 lines · all logic (ES module)
+│   ├── main.js                   4744 lines · all logic (ES module)
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3, shipped in-repo (951,904 B)
 │       └── README.md             origin / SHA-256 / upgrade steps
 ├── src-tauri/                    Rust backend
 │   ├── src/
 │   │   ├── main.rs               6 lines · entry point
-│   │   ├── lib.rs                587 lines · 37 command registrations + import/export + startup migration
+│   │   ├── lib.rs                603 lines · 38 command registrations + import/export + startup migration
 │   │   ├── models.rs             38 lines · Transaction / Template / Category
 │   │   ├── db.rs                 105 lines · schema and seed data
 │   │   ├── service.rs            1038 lines · business logic
@@ -502,8 +509,13 @@ ledger/
 │   ├── capabilities/default.json permission declarations (main window only)
 │   ├── icons/                    app icons
 │   ├── gen/android/              Android Gradle project (committed; build outputs are not)
-│   │   └── app/src/main/java/com/tauri_app/ledger/MainActivity.kt
-│   │                             the only hand-written Kotlin: overrides handleBackNavigation = true (§14.4)
+│   │   └── app/src/main/
+│   │       ├── java/com/tauri_app/ledger/MainActivity.kt   back stack, soft keyboard, widget refresh and quick action
+│   │       └── java/com/tauri_app/ledger/widget/
+│   │           ├── WidgetCommon.kt             read-only DB snapshot / amount fitting / ring bitmap / refresh
+│   │           ├── LedgerWidgetProvider.kt     summary widget (2x2 / 4x2)
+│   │           ├── BudgetWidgetProvider.kt     budget ring widget (2x2)
+│   │           └── QuickEntryWidgetProvider.kt quick-entry widget (2x1)
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           window, CSP and bundling config
 ├── docs/                         screenshots (detail.png / account.png / stats.png)
@@ -795,6 +807,22 @@ Programmatic backs (overlays closed through the UI) are told apart from gesture 
 
 ---
 
+### 14.5 Home-screen widget (Android / OriginOS)
+
+| Item | Implementation |
+|---|---|
+| Shape | Three separate `AppWidgetProvider`s, each listed in the picker: summary (2x2 / 4x2 adaptive), budget ring (2x2), quick entry (2x1) |
+| Data source | Opens Tauri's `dataDir/ledger.sqlite` read-only (`app_data_dir` resolves to `Context.dataDir` on Android, **not** `filesDir`); `WidgetCommon` aggregates today's expense, today's record count, this month's expense, budget, daily average and remaining days, amounts in cents |
+| Refresh | (1) `MainActivity.onStop()` → `WidgetCommon.refreshAll()` refreshes all three components after adding / editing / deleting; (2) system `updatePeriodMillis = 30 minutes`; (3) `onAppWidgetOptionsChanged` after resize; (4) `onUpdate` when the system restores widgets after boot |
+| Amount display | `WidgetCommon.fitAmount()` steps the font size down by formatted string length (max 24sp / min 10sp) so large amounts are never truncated; 2x2/3x2 and 4x2 keep the same semantics: top-right is "month expense", bottom is "budget remaining" |
+| Resilience | If the DB does not exist yet or is write-locked, falls back to the last `SharedPreferences` snapshot so the widget never goes blank |
+| Interaction boundary | Summary / budget cards open `MainActivity`; quick entry writes `widget_action=add` into the data directory natively and the front end consumes it via `take_widget_action` to open the add panel (skipped while locked) |
+| Styling | RemoteViews only uses TextView / ImageView / ProgressBar / LinearLayout / FrameLayout; warm gradient card with indigo progress, budget ring drawn as a Canvas bitmap; `values-night` follows the system; 22dp corners |
+| OriginOS | Standard AppWidget (third-party widgets on OriginOS use the standard system); `targetCellWidth/Height` are 2x2 / 2x2 / 2x1, `resizeMode = horizontal\|vertical`, `previewLayout` feeds the picker |
+| Privacy boundary | The widget does not check the app lock: amounts remain visible on the launcher even when the lock is enabled. Known boundary; a "hide amounts" switch can be added later |
+
+---
+
 ## 15. Test strategy
 
 ### 15.1 Backend unit tests (27: 26 run + 1 `#[ignore]`)
@@ -854,6 +882,7 @@ The front end currently has **no automated test framework**. The cases below mus
 | U-18 | Report "Balance range → Day" date picker | The date list shows only dates that actually have records (newest first), each row showing that day's expense/income; any historical date with data can be selected and correctly shows that day's balance; dates without records are absent from the list; an empty state appears for an empty ledger (§5.2) |
 | U-19 | Record detail / edit | Amount sign and colour are correct (income green); an empty note shows "无"; records without `createdAt` hide the "录入于" sub-line; entering from search results and going back keeps the search results; deleting from the detail page returns to the origin page with no list flicker; the edit sheet hides the quick-template row and, after saving, the detail page, home list and stats page all refresh; switching expense → income in edit mode swaps the category grid; **the amount can be edited and must be >0; a type switch requires picking a new-type category and cancelling leaves the type unchanged; tapping a category saves immediately; picking the same date writes nothing and a cross-month move syncs the home month; clearing the note and saving shows "无"; for each of the five sheets, back closes the sheet first and the detail page stays** |
 | U-20 | Android touch / soft keyboard | Tapping a row opens the detail page without any field panel popping up (the synthesised click from the same touch is swallowed) and desktop mouse input is unaffected; tapping the note row shows the IME with the input and "Save" visible and usable; closing the keyboard drops the panel back to the bottom; cancelling / saving restores both panel and keyboard state |
+| U-21 | Android home-screen widgets (OriginOS) | All three widgets appear in the picker; on the 2x2/3x2 summary the top-right is "month expense" and the bottom is "budget remaining", matching 4x2; zero, normal and million-level amounts are never truncated; the budget ring shows percent / remaining / daily average; the 2x1 quick-entry widget opens the add panel directly; widgets refresh immediately after returning home; dark mode colours are correct; they still render after process kill and reboot |
 
 > Divergence from the early course documents: their T-07 has been rewritten to match reality (moving a date to another out-of-window value is still rejected, but re-saving an **unchanged** out-of-window date is allowed — see §5.1), and T-14 "a corrupted data file falls back to an empty ledger" does not exist in the implementation (see §9), so it is dropped and not used as an acceptance case.
 

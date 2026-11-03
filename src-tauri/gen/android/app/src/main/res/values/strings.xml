@@ -1,4 +1,11 @@
 <resources>
     <string name="app_name">"ledger"</string>
     <string name="main_activity_title">"ledger"</string>
+    <string name="widget_label">"Ledger 记账"</string>
+    <string name="widget_description">"今日支出、本月支出与预算进度"</string>
+    <string name="widget_budget_label">"Ledger 预算"</string>
+    <string name="widget_budget_description">"预算环、剩余金额与日均可用"</string>
+    <string name="widget_budget_ring">"预算使用进度"</string>
+    <string name="widget_quick_label">"Ledger 记一笔"</string>
+    <string name="widget_quick_description">"点击直接打开 Ledger 记账面板"</string>
 </resources>

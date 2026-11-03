@@ -519,6 +519,21 @@ fn import_db_data(
     Ok(count as usize)
 }
 
+/// 取走桌面组件触发的待处理动作（目前只有 "add"：打开「记一笔」面板），
+/// 读取后立即删除动作文件，避免下次启动重复触发。
+#[tauri::command]
+fn take_widget_action(app: tauri::AppHandle) -> Option<String> {
+    let path = db_path(&app).ok()?.with_file_name("widget_action");
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    let action = raw.trim().to_string();
+    if action.is_empty() {
+        None
+    } else {
+        Some(action)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -581,6 +596,7 @@ pub fn run() {
             ai_test_key,
             read_db_bytes,
             import_db_data,
+            take_widget_action,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

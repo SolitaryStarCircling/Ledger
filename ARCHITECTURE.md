@@ -59,7 +59,7 @@ flowchart TB
 |---|---|---|
 | 表现层 | `src/index.html` + `src/styles.css` + `src/main.js` | 全部 UI 与交互、统计计算、导出格式化；不含任何业务持久化逻辑 |
 | 通信层 | Tauri IPC | 前端 `invoke(命令名, 参数)` → Rust `#[tauri::command]`，单窗口、无自定义协议 |
-| 业务层 | `lib.rs` 注册的 37 个命令 + `service.rs` / `keys.rs` / `lock.rs` / `ai.rs` | 参数校验、金额换算、事务、凭据管理、AI 调用 |
+| 业务层 | `lib.rs` 注册的 38 个命令 + `service.rs` / `keys.rs` / `lock.rs` / `ai.rs` | 参数校验、金额换算、事务、凭据管理、AI 调用 |
 | 存储层 | `db.rs` + `rusqlite` | 建表、种子数据、SQLite 单文件读写 |
 | 外部依赖 | `ai.rs` 内的 `reqwest` | 仅在用户点「生成分析」时才出现，方向单一（应用 → 服务商） |
 
@@ -92,7 +92,7 @@ flowchart TB
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `src/index.html` | 805 | 全部页面结构：明细页 / 记录详情页 / 财报页 / 分类明细页 / 设置页，以及记账面板、日历、弹层、锁屏层、批量操作栏 |
-| `src/main.js` | 4724 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题、返回栈；顶部 18 个分区导航注释 |
+| `src/main.js` | 4744 | 全部逻辑（ES Module，单文件）：状态、渲染、统计、导入导出、AI 面板、锁屏、主题、返回栈；顶部 18 个分区导航注释 |
 | `src/styles.css` | 2561 | 全部样式：主题变量、组件、动效 |
 | `src/vendor/xlsx.full.min.js` | 951,904 B（约 929.6 KB） | SheetJS 0.20.3，随包分发（离线 + 规避 CVE），仅 Excel 导入路径按需加载 |
 | `src/vendor/README.md` | — | 该 vendor 文件的来源、哈希、升级步骤 |
@@ -118,7 +118,7 @@ flowchart TB
 | 模块 | 行数 | 职责 | 依赖 |
 |---|---:|---|---|
 | `main.rs` | 6 | 进程入口，调用 `ledger_lib::run()` | `lib` |
-| `lib.rs` | 587 | 装配层：托管状态、注册 37 个命令、导出/导入实现、启动迁移 | 全部业务模块 |
+| `lib.rs` | 603 | 装配层：托管状态、注册 38 个命令、导出/导入实现、启动迁移 | 全部业务模块 |
 | `db.rs` | 105 | 打开连接、幂等建表、种子分类、首次写入默认常用项 | `models`（隐含）、`rusqlite` |
 | `models.rs` | 38 | 三个数据结构：`Transaction` / `Template` / `Category` | `serde` |
 | `service.rs` | 1038 | 金额与日期的解析校验、id 生成、CRUD、整条更新、分类校验与删除保护、预算、settings 读写 | `models`、`chrono`、`rusqlite` |
@@ -141,11 +141,11 @@ main.rs
 
 ---
 
-## 3. 命令契约（37 个）
+## 3. 命令契约（38 个）
 
-来源：`lib.rs` 的 `invoke_handler` 清单（`lib.rs#L546-L584`）。下表 37 行与之逐项闭合，无多写、无少写。所有命令的失败路径统一返回 `Result<_, String>`，`String` 是可以直接展示给用户的中文提示。
+来源：`lib.rs` 的 `invoke_handler` 清单（`lib.rs#L561-L600`）。下表 38 行与之逐项闭合，无多写、无少写。所有命令的失败路径统一返回 `Result<_, String>`，`String` 是可以直接展示给用户的中文提示。
 
-**分组（7 组，合计 37）**：transactions 9 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2。
+**分组（8 组，合计 38）**：transactions 9 · budgets 2 · templates 4 · categories 6 · settings + lock 7 · ai 7 · data 2 · platform 1。
 
 ### 3.1 transactions（9）
 
@@ -219,7 +219,13 @@ main.rs
 | `read_db_bytes` | — | `Vec<u8>` | 导出用；先落临时副本并剔除 `ai_api_key` / `deepseek_api_key` / `ai_key_hint`，任一步失败回退原始字节 |
 | `import_db_data` | `data: Vec<u8>` | `usize` | SQLite 备份恢复，原子覆盖（详见 §6）；返回导入的流水条数 |
 
-> 前端调用点示例：`add_tx` ← `saveTx()`（`main.js`）、`update_tx` ← 记录详情页「编辑」/ 改类型 / 单条改分类、`update_amount` / `update_date` / `update_note` ← 记录详情页点字段直接修改、`update_category_batch` ← 批量改分类、`read_db_bytes` ← `exportBackup()`、`import_db_data` ← `importBackup()`、`ai_analyze` ← 生成分析。37 个命令均有前端调用点。
+### 3.8 platform（1）
+
+| 命令 | 入参 | 返回 | 说明 |
+|---|---|---|---|
+| `take_widget_action` | — | `Option<String>` | 桌面组件「记一笔」专用：读取并删除 `dataDir/widget_action`，返回 `"add"`；无待处理动作返回 `null` |
+
+> 前端调用点示例：`add_tx` ← `saveTx()`（`main.js`）、`update_tx` ← 记录详情页「编辑」/ 改类型 / 单条改分类、`update_amount` / `update_date` / `update_note` ← 记录详情页点字段直接修改、`update_category_batch` ← 批量改分类、`read_db_bytes` ← `exportBackup()`、`import_db_data` ← `importBackup()`、`ai_analyze` ← 生成分析、`take_widget_action` ← 组件「记一笔」回前台。38 个命令均有前端调用点。
 
 ---
 
@@ -331,7 +337,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 | 机制 | 实现 | 出处 |
 |---|---|---|
-| 连接托管 | 单条 `Mutex<Connection>` 由 `app.manage(Mutex::new(conn))` 托管，命令通过 `tauri::State` 取用 | `lib.rs#L523-L541`（`run()` 的 `setup`）；`app.manage` 在 `#L542-L543` |
+| 连接托管 | 单条 `Mutex<Connection>` 由 `app.manage(Mutex::new(conn))` 托管，命令通过 `tauri::State` 取用 | `lib.rs#L543-L560`（`run()` 的 `setup`）；`app.manage` 在 `#L557-L558` |
 | 锁作用域 | 同步命令持锁完成即释放；**async 命令必须先收敛锁、不得跨 `await` 持锁**（`ai_analyze` / `ai_test_key` 用内层块先取出 `api_key` 与配置再 `await`） | `lib.rs#L306-L354` |
 | 金额解析 | 逐位校验：非空、不以 `.` 开头、至多 1 个小数点、整数位 ≤9 位、小数位 ≤2 位、结果 >0 | `service.rs#L10-L40` |
 | id 生成 | 毫秒时间戳 + 进程内自增 `ID_SEQ`（从 1 起）+ 奇数倍双射混淆 low32。仅用毫秒时，同毫秒两次写入会撞 `PRIMARY KEY`；seq 从 1 起避免与「旧版本纯毫秒 id」撞车 | `service.rs#L69-L81`（`ID_SEQ` 在 `#L69`） |
@@ -353,15 +359,16 @@ CREATE TABLE IF NOT EXISTS settings (
 | 保存防重入 | `savingTx` 守卫，`if (savingTx) return`，避免双击/回车重复记一笔 | `main.js#L2954`、`#L2957` |
 | 查看月份 | `viewMonth`（`YYYY-MM`）；切月必须重新 `loadBudget()`，否则会沿用上月的预算额度 | `main.js#L275`、`#L2207-L2212` |
 | 锁屏层 | 默认 `display:none`，仅当 JS 移除 `hidden` 属性时显示；切后台（`visibilitychange` + `document.hidden` 且已启用锁）重新锁定 | `index.html#lockOverlay`、`main.js#L4520-L4529`、`#L4667-L4668` |
-| 分钟级重绘 | 定时器仅在「页面可见**且**跨天」时 `renderHome()`；无条件重绘会让带入场动画的列表每分钟重播动画、还会把已侧滑打开的行收回 | `main.js#L4711-L4717` |
+| 分钟级重绘 | 定时器仅在「页面可见**且**跨天」时 `renderHome()`；无条件重绘会让带入场动画的列表每分钟重播动画、还会把已侧滑打开的行收回 | `main.js#L4730-L4736` |
 | 日期选择防呆 | 新建时日历只允许当前月 ±2 个月；编辑账目与详情页改日期为前后 1 年（`calRange()` 给出 `min`/`max`，边界处禁用箭头），超界日期渲染为不可点的 `.cal-day.off` | `main.js#L2825-L2838`（越界置灰在 `#L2865-L2870`） |
 | 月份视图范围 | 明细页可切月份限制为「前 12 个月 ~ 后 3 个月」（`monthShiftAllowed`） | `main.js#L2199-L2205` |
 | 主题 | 三态：跟随系统（`prefers-color-scheme`）/ 显式 `data-theme="dark"` / `data-theme="light"` | `styles.css#L59-L127`、`main.js#L4453-L4478` |
 | 财报日期选择 | 「结余范围」面板选「天」后，日期列表**只列账本中确有记录**的日期（扫 `txs` 聚合、去重倒序），不再限制「近 12 天 / 后 3 天」；每行右侧显示当天支出/收入，无记录时给出空态 | `main.js#L2148-L2180` |
 | 交互防抖 | 常用项胶囊 350ms 内防连点；长按 500ms 进入多选（横滑/抖动 >8px 取消） | `main.js` 常用项与列表手势段 |
 | 触摸幽灵 click | 行的点按在 `pointerup` / `touchend` 上消费后一律取消合成 click；详情页切换另设 450ms 点击吞掉窗口，避免同一次触摸在新页面同坐标误触字段行 / 底部按钮 | `main.js#L609-L621`、`#L1983-L1991` |
-| 软键盘适配 | 原生层把 IME 底部 inset 转为根容器 `padding-bottom`（`AndroidManifest.xml` 设 `adjustResize`），WebView 变矮后 `bottom:0` 弹层自然落在键盘上方；JS 同时监听 `visualViewport` 与 `window resize` 兜底抬高，键盘收起 / 关闭面板即还原 | `AndroidManifest.xml#L18`、`MainActivity.kt#L28-L38`、`main.js#L1993-L2026` |
+| 软键盘适配 | 原生层把 IME 底部 inset 转为根容器 `padding-bottom`（`AndroidManifest.xml` 设 `adjustResize`），WebView 变矮后 `bottom:0` 弹层自然落在键盘上方；JS 同时监听 `visualViewport` 与 `window resize` 兜底抬高，键盘收起 / 关闭面板即还原 | `AndroidManifest.xml#L51`、`MainActivity.kt#L31-L41`、`main.js#L1993-L2026` |
 | 底部导航显隐 | 记录详情页是二级页面：进入时给 `#app` 加 `detail-open`，CSS 隐藏 `.tabbar` / `.tab-settings` / `.fab`，只保留顶栏返回键；关闭详情、切 tab、打开分类明细页时移除，一级页面（明细 / 财报 / 设置）保持原有导航 | `main.js#L1741`、`#L1784`、`#L2585`、`#L2623`、`styles.css#L1808-L1812` |
+| 桌面组件 | 三个原生 `AppWidgetProvider`（汇总 / 预算环 / 快捷记账）+ `RemoteViews`；汇总在 2x2/3x2 与 4x2 间切布局，金额按字符数分档缩字号避免截断；数据只读 `dataDir/ledger.sqlite`，失败回退 `SharedPreferences`；`WidgetCommon.refreshAll()` 在应用 `onStop` 与系统 30 分钟周期刷新；快捷记账通过 `widget_action` 文件 + `take_widget_action` 命令把「打开记账面板」传给前端 | `WidgetCommon.kt#L1-L253`、`LedgerWidgetProvider.kt#L1-L115`、`BudgetWidgetProvider.kt#L1-L73`、`QuickEntryWidgetProvider.kt#L1-L46`、`MainActivity.kt#L44-L68`、`lib.rs#L522-L535`、`main.js#L4681-L4722` |
 
 ---
 
@@ -373,7 +380,7 @@ CREATE TABLE IF NOT EXISTS settings (
 | 应用锁 | 4-8 位纯数字 PIN，Argon2id 哈希 + 随机盐写入 `settings`（`lock_enabled` / `lock_pin_hash`） | **不加密磁盘数据库文件**。它是「防他人在这台设备上误看」，磁盘级加密属于另一层能力，**刻意不做**（`lock.rs` 头注释已声明） |
 | PIN 校验 | 本地比对，不联网、不落盘明文；未设置哈希时一律放行 | 无重试次数限制、无锁定延时（当前实现未做） |
 | API Key 存储 | 三档：① 系统钥匙串（仅 Windows / macOS，`keyring` 条件编译）② 本机数据库（`ai_api_key`）③ 仅内存（进程内 `Mutex<Option<String>>`，退出即失效）。Android 上钥匙串不可用时回落 | `keys.rs#L10-L77`；界面只回显前 3 后 4 位掩码（≤8 位时回显 `••••`） |
-| Key 迁移 | 旧键 `deepseek_api_key` 启动时迁移到 `ai_api_key` | `keys::migrate_legacy`（`keys.rs#L277`），调用点 `lib.rs#L525` |
+| Key 迁移 | 旧键 `deepseek_api_key` 启动时迁移到 `ai_api_key` | `keys::migrate_legacy`（`keys.rs#L277`），调用点 `lib.rs#L556` |
 | 备份不带凭据 | 导出先复制库文件到临时副本，`DELETE FROM settings WHERE key IN ('ai_api_key','deepseek_api_key','ai_key_hint')`，再读字节；**任一步失败回退原始字节** | `lib.rs#L341-L371`（剔除语句在 `#L353`） |
 | 导入范围 | 只覆盖 `transactions` / `budgets` / `templates`，`categories` 按 id **合并**（不整表清空）；**不含任何设置项**（密码、API Key、隐私授权、自动归类规则） | `lib.rs#L372-L505`；导入确认文案需明确这一点 |
 | 导入原子性 | 写临时文件 → `ATTACH DATABASE`（`#L391`）→ 校验 `sqlite_master` 确有 `transactions` 表（`#L399`）→ 事务内 `DELETE` + `INSERT`（`#L469`、`#L480`、`#L491`）→ `COMMIT` → `DETACH` + 删临时文件；任一步失败均清理临时文件并 `DETACH` | `lib.rs#L372-L505` |
@@ -468,10 +475,10 @@ AI 分析是**可选能力**，不配置也能用完整个应用；所有请求�
 | 项 | 现状 |
 |---|---|
 | schema 变更 | 无迁移框架，只能新增整张表（§4.5） |
-| 损坏数据库 | 打开失败直接返回错误，**不自动回退空库**（`lib.rs#L521-L522`）；用户需靠备份恢复 |
+| 损坏数据库 | 打开失败直接返回错误，**不自动回退空库**（`lib.rs#L552-L553`）；用户需靠备份恢复 |
 | PIN 爆破防护 | 无尝试次数限制与延时 |
 | 导入范围 | 不含设置项；缺列的新旧备份不兼容 |
-| 前端规模 | 单文件 `main.js` 4724 行，无模块拆分；靠顶部 18 个分区的导航注释 + 同名锚点维持可读性。拆分触发条件：单文件超 6000 行、新功能需跨 3 个以上分区、同一函数被 3 个以上分区调用且语义漂移 |
+| 前端规模 | 单文件 `main.js` 4744 行，无模块拆分；靠顶部 18 个分区的导航注释 + 同名锚点维持可读性。拆分触发条件：单文件超 6000 行、新功能需跨 3 个以上分区、同一函数被 3 个以上分区调用且语义漂移 |
 | 查询规模 | 全量加载 + 前端过滤；未做分页/虚拟列表，超大账本（万条以上）未做性能验证 |
 
 **与早期课程文档的差异说明**：项目早期文档集（`ledger document/`，从未纳入版本控制）中的若干描述已与现状不符，本文不沿用。典型三处：① 其 UI 规范写的是 iOS 系统色（`#F2F2F7` / `#007AFF` / 24px 圆角），现行主题是暖中性纸感 + 暗靛，实测值见 §13；② 其数据库文档只描述 1 张表，实际为 5 张（§4）；③ 其测试计划中的「改日期为 400 天前一律拒绝」与现状相反（现状允许**未修改日期**的原样保存）、「数据文件损坏回退空账」在代码中并未实现。
@@ -485,14 +492,14 @@ ledger/
 ├── src/                          前端（原生 HTML/CSS/JS，无构建）
 │   ├── index.html                805 行 · 全部页面结构
 │   ├── styles.css                2561 行 · 主题变量与全部样式
-│   ├── main.js                   4724 行 · 全部逻辑（ES Module）
+│   ├── main.js                   4744 行 · 全部逻辑（ES Module）
 │   └── vendor/
 │       ├── xlsx.full.min.js      SheetJS 0.20.3，随包分发（951,904 B）
 │       └── README.md             来源 / SHA-256 / 升级步骤
 ├── src-tauri/                    Rust 后端
 │   ├── src/
 │   │   ├── main.rs               6 行 · 入口
-│   │   ├── lib.rs                587 行 · 37 个命令注册 + 导入导出 + 启动迁移
+│   │   ├── lib.rs                603 行 · 38 个命令注册 + 导入导出 + 启动迁移
 │   │   ├── models.rs             38 行 · Transaction / Template / Category
 │   │   ├── db.rs                 105 行 · 建表与种子数据
 │   │   ├── service.rs            1038 行 · 业务逻辑
@@ -502,8 +509,13 @@ ledger/
 │   ├── capabilities/default.json 权限声明（仅 main 窗口）
 │   ├── icons/                    应用图标
 │   ├── gen/android/              Android Gradle 工程（已入库，编译产物不入库）
-│   │   └── app/src/main/java/com/tauri_app/ledger/MainActivity.kt
-│   │                             唯一手写 Kotlin：覆写 handleBackNavigation = true（§14.4）
+│   │   └── app/src/main/
+│   │       ├── java/com/tauri_app/ledger/MainActivity.kt   返回栈、软键盘、组件刷新与快捷动作
+│   │       └── java/com/tauri_app/ledger/widget/
+│   │           ├── WidgetCommon.kt             只读库快照 / 金额分档 / 环形图 / 统一刷新
+│   │           ├── LedgerWidgetProvider.kt     汇总组件（2x2 / 4x2）
+│   │           ├── BudgetWidgetProvider.kt     预算环组件（2x2）
+│   │           └── QuickEntryWidgetProvider.kt 快捷记账组件（2x1）
 │   ├── Cargo.toml / Cargo.lock
 │   └── tauri.conf.json           窗口、CSP、打包配置
 ├── docs/                         截图（detail.png / account.png / stats.png）
@@ -789,6 +801,22 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 
 ---
 
+### 14.5 桌面组件（Android / OriginOS）
+
+| 项 | 实现 |
+|---|---|
+| 形态 | 三个独立 `AppWidgetProvider`，选择器里分别出现：汇总（2x2 / 4x2 自适应）、预算环（2x2）、快捷记账（2x1） |
+| 数据来源 | 只读打开 Tauri 的 `dataDir/ledger.sqlite`（`app_data_dir` 在 Android 解析为 `Context.dataDir`，**不是 `filesDir`**）；`WidgetCommon` 统一聚合今日支出、今日笔数、本月支出、本月预算、日均与剩余天数，金额单位为分 |
+| 刷新时机 | ① `MainActivity.onStop()` → `WidgetCommon.refreshAll()`：记账 / 改账 / 删除后离开应用立刻刷新三个组件；② 系统 `updatePeriodMillis = 30 分钟`；③ 尺寸变化 `onAppWidgetOptionsChanged`；④ 开机后系统恢复组件时 `onUpdate` |
+| 金额显示 | `WidgetCommon.fitAmount()` 按格式化后的字符数分档下调字号（上限 24sp / 下限 10sp），大额不会被 `ellipsize` 截断；汇总卡 2x2/3x2 与 4x2 的语义一致：右上角是「本月支出」，底部是「预算剩余」 |
+| 容错 | 数据库尚未创建或被写锁占用 → 回退 `SharedPreferences` 里的上次快照，组件不出现空白 |
+| 交互边界 | 汇总 / 预算整卡打开 `MainActivity`；快捷记账点击后原生层把 `widget_action=add` 写入数据目录，前端 `take_widget_action` 取走并打开「记一笔」面板（锁定态不打开） |
+| 样式 | `RemoteViews` 只用 TextView / ImageView / ProgressBar / LinearLayout / FrameLayout；暖白渐变卡片 + 暗靛进度，预算环用 Canvas 生成 Bitmap；`values-night` 跟随系统深浅色；圆角 22dp |
+| OriginOS 适配 | 使用标准 AppWidget（OriginOS 第三方组件即标准体系）；各组件 `targetCellWidth/Height` 分别为 2x2 / 2x2 / 2x1，`resizeMode = horizontal\|vertical`，`previewLayout` 供选择器预览 |
+| 隐私边界 | 组件不校验应用锁：启用锁屏后金额仍显示在桌面。这是已知边界，后续可在设置里加「组件隐藏金额」开关 |
+
+---
+
 ## 15. 测试策略
 
 ### 15.1 后端单元测试（27 个：26 执行 + 1 `#[ignore]`）
@@ -848,6 +876,7 @@ keytool -genkey -v -keystore ledger-release.keystore -alias <别名> -keyalg RSA
 | U-18 | 财报「结余范围 → 天」日期选择 | 日期列表只列出账本中**有记录**的日期（倒序），每行显示当天支出/收入；任意有数据的历史日期均可选中并正确显示当日结余；无记录的日期不出现在列表中；账本为空时显示空态（§5.2） |
 | U-19 | 记录详情页 / 编辑 | 详情页金额符号与颜色正确（收入绿）；备注为空显示「无」；无 `createdAt` 的旧记录隐藏「录入于」副行；从搜索结果进入详情，返回后仍停在搜索结果；详情页删除后回到来源页且列表无屏闪；编辑面板隐藏「收藏为常用」，保存后详情页、明细列表、财报页同步刷新；编辑中把支出切成收入后分类网格随之切换；**点金额可改并校验 >0；点类型后必选新类型分类，取消则类型不变；点分类点选即存；点日期同日不写库、跨月时首页月份同步；点备注清空保存显示「无」；五个弹层按返回键先关弹层、详情页保留** |
 | U-20 | 安卓触摸 / 软键盘 | 单击流水进入详情页后不再弹出任何字段面板（同一次触摸的合成 click 被吞掉），桌面鼠标不受影响；详情页点备注弹出输入法后输入框与「保存」可见、可输入；收起键盘后面板落回底部；取消 / 保存后面板与键盘状态正常还原 |
+| U-21 | 安卓桌面组件（OriginOS） | 三个组件分别出现在选择器：汇总卡 2x2/3x2 右上角为「本月支出」、底部为「预算剩余」，4x2 语义一致；0 元、普通、百万级金额均不被截断；预算环显示百分比 / 剩余 / 日均；快捷记账 2x1 点击直接打开「记一笔」面板；记账后回桌面立即刷新；深色模式配色正确；杀进程、重启后正常渲染 |
 
 > 与早期课程文档的差异：其测试计划的 T-07 已按现状改写（改成另一个超窗日期仍拒绝，但**原样保存**超窗日期放行，见 §5.1）；T-14「数据文件损坏自动回退空账」在实现中并不存在（见 §9），故剔除、不列为验收项。
 

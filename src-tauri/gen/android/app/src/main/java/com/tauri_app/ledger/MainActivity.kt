@@ -1,11 +1,14 @@
 package com.tauri_app.ledger
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.tauri_app.ledger.widget.WidgetCommon
+import java.io.File
 
 class MainActivity : TauriActivity() {
     // Tauri 模板把父类的 handleBackNavigation 覆写为 false，等于不注册任何后退回调：
@@ -36,5 +39,31 @@ class MainActivity : TauriActivity() {
             view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, ime)
             insets
         }
+
+        handleWidgetIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWidgetIntent(intent)
+    }
+
+    /**
+     * 桌面组件带动作启动应用时（目前只有「记一笔」），把动作写进数据目录。
+     * 前端启动 / 回到前台调用 take_widget_action 取走并打开对应面板；
+     * 这样不用引入额外的 Tauri 插件或深链依赖。
+     */
+    private fun handleWidgetIntent(intent: Intent?) {
+        val action = intent?.getStringExtra(WidgetCommon.EXTRA_WIDGET_ACTION) ?: return
+        File(applicationInfo.dataDir, "widget_action").writeText(action)
+        intent.removeExtra(WidgetCommon.EXTRA_WIDGET_ACTION)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 记账 / 改账 / 删除都发生在应用内；离开应用时刷新桌面组件，
+        // 回到桌面即可看到最新数字，不用等系统 30 分钟周期。
+        WidgetCommon.refreshAll(this)
     }
 }

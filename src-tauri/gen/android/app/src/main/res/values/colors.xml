@@ -7,4 +7,17 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- 桌面组件：沿用应用内的暖中性底 + 暗靛强调色 -->
+    <color name="widget_bg">#FFFFFFFF</color>
+    <color name="widget_bg2">#FFF8F6F2</color>
+    <color name="widget_stroke">#FFE8E5E0</color>
+    <color name="widget_sep">#FFEDEAE5</color>
+    <color name="widget_text">#FF1B1A18</color>
+    <color name="widget_text2">#FF6B665F</color>
+    <color name="widget_accent">#FF58619D</color>
+    <color name="widget_on_accent">#FFFFFFFF</color>
+    <color name="widget_expense">#FFA2605C</color>
+    <color name="widget_income">#FF5E7A63</color>
+    <color name="widget_progress_track">#FFECEAE6</color>
 </resources>

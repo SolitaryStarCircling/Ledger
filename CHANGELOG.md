@@ -15,6 +15,37 @@
 
 ---
 
+## [1.8.0] — 2026-11-03
+
+提交链接待提交后回填 · tag 待发布。以下改动由 `git diff` 逐条核对得出。
+
+**新增：Android 桌面组件（按 OriginOS 适配）**
+
+- **汇总卡（2x2 / 3x2 / 4x2）**：今日支出（大字）、本月支出、今日笔数与日均、预算剩余与进度；2x2/3x2 与 4x2 语义统一，右上角固定「本月支出」、底部固定「预算剩余」
+- **预算环（2x2）**：Canvas 生成环形进度位图，中心显示已用百分比，底部显示预算剩余与按剩余天数均摊的日均可用；超支时环与文字转红
+- **快捷记账（2x1）**：整卡点击直接进入 Ledger 的「记一笔」面板；组件 `PendingIntent` 带 `widget_action=add` 启动应用，`MainActivity` 写入数据目录，前端启动 / 回到前台调用新增的 `take_widget_action` 命令取走并打开面板（锁定态不打开）
+- 三个组件均为独立 `AppWidgetProvider`，在 OriginOS 选择器里分别出现；统一由 `WidgetCommon.refreshAll()` 在应用 `onStop()` 与系统 30 分钟周期刷新
+- 数据继续只读打开 `dataDir/ledger.sqlite`（Tauri `app_data_dir` 在 Android 解析为 `Context.dataDir`）；读库失败或被写锁占用时回退 `SharedPreferences` 上次快照
+- 样式升级：暖白渐变卡片、分区小圆点、细分割线、预算进度百分比；`values-night` 跟随系统深浅色；圆角 22dp
+
+**修复**
+
+- **组件金额显示**：原 2x2/3x2 底部写「本月支出」但蓝色进度条实际表示预算剩余，语义错位；现改为右上角显示本月支出、底部显示预算剩余，与 4x2 一致
+- **大额截断**：金额改为按格式化后的字符数分档缩字号（`WidgetCommon.fitAmount()`），大额不再被 `ellipsize` 截断；同时消除 4x2 右栏与左栏的挤压
+
+**测试**
+
+- 安卓：`:app:compileArmDebugKotlin` 与 `:app:processArmDebugMainManifest` 编译通过
+- Rust：`cargo check` 通过（新增 `take_widget_action` 命令）；`cargo test` 27 个用例（26 通过 + 1 ignored）
+- 前端：`node --check` 通过
+- 真机（OriginOS / iQOO）待验：三个组件添加、2x2 ↔ 4x2 缩放、快捷记账直达面板、记账后回桌面刷新、深色模式、杀进程 / 重启
+
+**版本号**：`1.7.1` → `1.8.0`（`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `src-tauri/Cargo.lock` 四处同步）
+
+**对应代码改动**：新增 `WidgetCommon.kt`（253 行）、`LedgerWidgetProvider.kt`（115 行）、`BudgetWidgetProvider.kt`（73 行）、`QuickEntryWidgetProvider.kt`（46 行）、`widget_ledger_compact.xml`（133 行）、`widget_ledger_wide.xml`（150 行）、`widget_ledger_budget.xml`（70 行）、`widget_ledger_quick.xml`（52 行）及 3 套 `widget_info`；`src/main.js` +20、`src-tauri/src/lib.rs` +16、`MainActivity.kt` 69 行、`AndroidManifest.xml` 新增 3 个 receiver、组件配色 / 文案 / drawable 若干
+
+---
+
 ## [1.7.1] — 2026-10-26
 
 提交链接 [696c6d3](https://github.com/SolitaryStarCircling/Ledger/commit/696c6d3) · tag [v1.7.1](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.7.1)。以下改动由 `git diff` 逐条核对得出。

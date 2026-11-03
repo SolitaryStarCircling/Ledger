@@ -4678,6 +4678,23 @@ async function initLock() {
 }
 
 /* ================= 启动 ================= */
+let bootReady = false;
+
+/** 桌面组件「记一笔」：原生层把动作写进数据目录，这里取走并打开记账面板 */
+async function consumeWidgetAction() {
+  let action = null;
+  try {
+    action = await invoke('take_widget_action');
+  } catch (e) {
+    return;
+  }
+  if (!action) return;
+  if (action === 'add') {
+    if (!lockOverlay.hidden) return;   // 锁定态不打开，避免绕过锁屏
+    openSheet();
+  }
+}
+
 async function boot() {
   applyTheme();
   await initLock();
@@ -4701,6 +4718,8 @@ async function boot() {
   renderLockSettingRow();
   alertIfOverBudget();
   switchTab('home');
+  bootReady = true;
+  setTimeout(consumeWidgetAction, 300);
 }
 boot();
 
@@ -4720,5 +4739,6 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     renderHome(true);   // 回到前台只是原地重绘，不重播入场动画
     if ($('#page-stats').classList.contains('active')) renderStats(true);
+    if (bootReady) consumeWidgetAction();   // 组件带「记一笔」动作回到前台
   }
 });
