@@ -17,7 +17,7 @@
 
 ## [1.8.0] — 2026-11-03
 
-提交链接待提交后回填 · tag 待发布。以下改动由 `git diff` 逐条核对得出。
+提交链接 [c534a4e](https://github.com/SolitaryStarCircling/Ledger/commit/c534a4e) · tag [v1.8.0](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.8.0)。以下改动由 `git diff` 逐条核对得出。
 
 **新增：Android 桌面组件（按 OriginOS 适配）**
 
