@@ -4838,6 +4838,7 @@ function lgPageIn(page, dir) {
   const tabs = () => $$('.nav-capsule .tab');
   let down = null;
   let blockClick = false;
+  let pending = -1;   // 拖动中手指停在哪个 tab，松手才真正切页
 
   /* 手指 x → 最近的 tab 序号，并把指示块贴到手指下方 */
   function track(x) {
@@ -4863,9 +4864,11 @@ function lgPageIn(page, dir) {
   capsule.addEventListener('pointerdown', e => {
     blockClick = false;
     down = null;
+    pending = -1;
     if (!e.isPrimary) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     down = { x: e.clientX, id: e.pointerId, moved: false };
+    thumb.classList.add('hold');                      // 按住即微微放大选中框
   });
 
   window.addEventListener('pointermove', e => {
@@ -4876,20 +4879,23 @@ function lgPageIn(page, dir) {
       thumb.dataset.drag = '1';                       // 通知 lgMoveThumb 让位
       thumb.style.transition = 'opacity .2s ease';
     }
-    const list = tabs();
-    const t = list[track(e.clientX)];
-    if (t && !t.classList.contains('active')) switchTab(t.dataset.tab);
+    pending = track(e.clientX);                       // 只跟手，不切页
   });
 
   function endDrag() {
     if (!down) return;
     const moved = down.moved;
     down = null;
-    if (!moved) return;                               // 纯点击，走原生 click
+    thumb.classList.remove('hold');                   // 松手后自然缩回原位大小
+    if (!moved) { pending = -1; return; }             // 纯点击，走原生 click
     blockClick = true;                                // 吞掉拖动后补发的 click
     delete thumb.dataset.drag;
     thumb.style.transition = '';
-    lgMoveThumb();                                    // 松手吸附到当前 tab
+    const list = tabs();
+    const t = pending >= 0 ? list[pending] : null;
+    pending = -1;
+    if (t && !t.classList.contains('active')) switchTab(t.dataset.tab);   // 松手才切页
+    else lgMoveThumb();                               // 吸附回当前 tab
   }
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);

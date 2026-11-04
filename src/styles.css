@@ -1060,11 +1060,16 @@ html, body {
   pointer-events: none;
   background: var(--fill-strong);
   box-shadow: inset 0 0 0 0.5px var(--hairline);
+  transform: scale(1);
+  transform-origin: center center;
   transition: left .36s cubic-bezier(.34,1.56,.64,1),
               width .36s cubic-bezier(.34,1.56,.64,1),
-              opacity .2s ease;
+              opacity .2s ease,
+              transform .38s cubic-bezier(.22,.68,.35,1.12);
 }
 .nav-thumb.on { opacity: 1; }
+/* 按住 / 拖动时选中框明显放大，松手或退出选中沿柔和弹性曲线自然缩回 */
+.nav-thumb.hold { transform: scale(1.16); }
 .tab.active svg { transform: scale(1.06); animation: tabPop .42s cubic-bezier(.34,1.56,.64,1); }
 .tab:active svg { transform: scale(0.9); }
 
