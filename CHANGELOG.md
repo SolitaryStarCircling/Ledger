@@ -17,7 +17,7 @@
 
 ## [1.8.1] — 2026-11-03
 
-提交链接待提交后回填 · tag 待发布。以下改动由 `git diff` 逐条核对得出。
+提交链接 [891a262](https://github.com/SolitaryStarCircling/Ledger/commit/891a262) · tag [v1.8.1](https://github.com/SolitaryStarCircling/Ledger/releases/tag/v1.8.1)。以下改动由 `git diff` 逐条核对得出。
 
 **调整**
 
